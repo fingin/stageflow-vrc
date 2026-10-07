@@ -20,7 +20,7 @@ public sealed class PreviewDisplay : IDisposable
         {
             Width = (uint)_width, Height = (uint)_height, Format = Format.B8G8R8A8_UNorm,
             BufferCount = 2, BufferUsage = Usage.RenderTargetOutput, SampleDescription = SampleDescription.Default,
-            Scaling = Scaling.Stretch, SwapEffect = SwapEffect.FlipDiscard, AlphaMode = AlphaMode.Ignore
+            Scaling = Scaling.None, SwapEffect = SwapEffect.FlipDiscard, AlphaMode = AlphaMode.Ignore
         });
         gpu.Factory.MakeWindowAssociation(hwnd, WindowAssociationFlags.IgnoreAltEnter);
         _buffer = _swapChain.GetBuffer<ID3D11Texture2D>(0); _target = gpu.Device.CreateRenderTargetView(_buffer);

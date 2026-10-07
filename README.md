@@ -1,91 +1,161 @@
-# StageFlow 0.1.0-alpha.4
+# StageFlow 2.0.0-alpha.2
 
-Windows show playback, master/follower MIDI timecode, Art-Net gridnode overlays,
-GPU compositing, Spout and live HLS in one application process.
+A Windows show workspace for video, timecode, Art-Net grids, compositing and live
+video routing. This is the independent **v2 fork**. V1 remains frozen.
 
-Open **StageFlow.App.exe** in the portable folder. No .NET installation, OBS,
-MediaMTX, Hnode, VidPlayMTC, separate MTC sender, or FFmpeg executable is used at
-runtime. Native libraries and the browser player ship beside the application.
-Windows 10/11 x64, Direct3D 11 and an NVIDIA GPU with H.264 NVENC are required for
-this build. Tested on this computer's RTX 4080. Existing Windows MIDI ports,
-including loopMIDI ports, remain selectable; StageFlow does not install a driver.
+Launch **StageFlow.App.exe** in **StageFlow-v2-Portable**. The portable build bundles
+.NET, the native media/network libraries and the HLS player. It runs as one
+application process; OBS, MediaMTX, Hnode and an external FFmpeg process are not
+required. Existing Windows MIDI ports, including loopMIDI, remain selectable.
 
-This is a working **alpha**, with automated hardware and streaming checks. Actual
-grandMA2 and VRChat/gridnode show validation remains to be performed. See
-[validation](docs/VALIDATION.md) for measured results and exact limits.
+Windows 10/11 x64 and a Direct3D 11 GPU are required. NVIDIA NVENC is the primary
+hardware encoding path; CPU H.264 is also available. Hardware MP4 decoding remains
+required. This alpha was validated on the supplied RTX 4080 computer. See
+[validation](docs/VALIDATION.md) for measurements and remaining external checks.
 
 ## Start a show
 
-1. Open a movie. Its audio feeds the selected local output and independently HLS.
-2. Import the Hnode `.shwcfg`, or open `samples/Sample Show.stageflow`. The supplied
-   configuration imports as BinaryStageFlight at 2560×1440/60. Loading a movie afterward
-   preserves the imported grid layout.
-3. In **Routing**, choose the MTC output for grandMA2, enable **Send master MTC**, and
-   apply. Select local audio, volumes and timing offsets in the same tab.
-4. Turn **MIDI outputs: ON** when ready to drive configured outputs. MTC goes to
-   grandMA2; grandMA2's Art-Net drives the grid. MIDI-DMX has a separate route.
-5. Add/duplicate clocks, arrange them in the preview, then **Start stream**.
-   **Output → Open player** opens the built-in HLS viewer.
+1. **File → Open movie**, then **Import Hnode layout**, or open the supplied
+   Sample Show sample. Import preserves your movie, clocks and existing live sources.
+2. Open **Edit → Preferences** (Ctrl+,). Under **Timecode**, select Internal mode,
+   the MTC rate and MIDI output to grandMA2, and enable output. Arm MIDI in the
+   main window when ready. IncomingMtc mode instead follows the selected MIDI input.
+3. Under **Art-Net**, select the interface/universe range receiving grandMA2's DMX.
+   StageFlow converts that data directly into the grid overlay. MTC does not feed Hnode.
+4. Select your local audio device under **Audio**. Local and program gains/mutes
+   are independent. Movie audio is included in HLS and other program outputs.
+5. Use **+ Add** for clock overlays, grids, Spout or network sources. Select a layer
+   to edit it live in Inspector. Drag in the preview to position it; Shift snaps.
+6. Configure encoding/destinations, then **Start stream** for HLS/RTMP/SRT.
+   Spout and NDI/OMT have their own enable switches in Preferences.
 
-The supplied Art-Net bind is `127.0.0.1:6454`. Only one application can own that
-endpoint: close Hnode's receiver when transferring that job to StageFlow. For
-another machine, choose the local network interface or `0.0.0.0` and send ArtDmx to
-this PC. Universe addresses are zero-based.
+The supplied layout is BinaryStageFlight, 2560×1440/60, with Art-Net bound to
+127.0.0.1:6454. Close the old Hnode receiver when transferring that port to StageFlow.
+For a remote grandMA2, select this PC's network interface and send ArtDmx to it.
+Universe addresses are zero-based. Keep data grids at native size/full opacity,
+with clocks outside the encoded data area.
 
-Default player: `http://127.0.0.1:8888/`. Playlist: `/live/index.m3u8`. Other computers
-use this PC's LAN address and configured port. The server is HTTP on the selected
-interfaces, without login or TLS. No firewall or router setting is changed.
+All clock overlays follow the same master MTC. Each has independent positioning,
+font, size, label, color, alpha, opacity and visibility. The color picker changes
+RGB; enter #AARRGGBB to set exact alpha. Duplicate layers to add more clocks.
 
-## Controls
+## Workspace and settings
 
-- Space: play/pause. Left/right: one source-video frame. Stop returns to the start.
-- Drag the timeline or enter `HH:MM:SS:FF` in Go to. Rate and show-start offset
-  determine displayed MTC; 29.97 drop-frame uses `HH:MM:SS;FF`.
-- M: add marker; double-click to locate. Right-click to rename/remove.
-  Ctrl+Up/Down: previous/next marker.
-- I/O: loop in/out; L: toggle loop. The range must be positive and fit the movie.
-- Drag unlocked layers to move them; use the lower-right handle to resize. Shift
-  snaps movement to eight pixels. Grid dimensions are protected in the inspector.
-- Ctrl+S: save, Ctrl+Shift+S: save as, Ctrl+O: movie, Ctrl+Shift+O: show, Ctrl+N: new.
-- Ctrl+Z/Y: undo/redo. F11: full screen. Drop a movie, show or Hnode file to open it.
+The preview keeps the show aspect ratio when the window changes size. Resize the
+hierarchy/inspector dividers, hide panes through View, float the inspector, or reset
+the workspace. Menus, tabs, buttons and surfaces share the selected palette.
 
-Clocks share master timecode, with independent position, label, font, size,
-colors, opacity, visibility and layer order. There is no small fixed clock count;
-project size and GPU capacity are the practical limits.
+Preferences has global search and 15 named sections:
 
-Projects are readable, versioned JSON (`.stageflow`), with relative media paths,
-atomic saves and a previous-file `.bak`. Recovery autosaves run every 30 seconds.
-**Show** includes recent projects. **Status** exposes timing, missed deadlines,
-audio underruns and route errors, with reconnect/reset controls.
+| Sections | Controls |
+|---|---|
+| General | Recovery, autosave interval, import/export personal preferences |
+| Appearance | Slate, Graphite, Midnight or Light; five accents; 8–13 pt text; compact rows |
+| Workspace | Pane widths, remembered window bounds, tooltips, status cards, snap spacing |
+| Video & canvas | Show name, GPU, output dimensions and rational frame rate |
+| Audio / Timecode | Device routes, independent gains/mutes, clock mode/rate and timing offsets |
+| Art-Net / MIDI-DMX | Receiver interface/universes, separate MIDI-DMX route and handshake |
+| Encoding / HLS server | Encoder, bitrates, keyframe/segment duration, server and playlist |
+| Spout / NDI & OMT | Program output enable switches and advertised names |
+| RTMP & SRT | Named output destinations and enable switches |
+| OSC | Receiver interface/port and access to control mappings |
+| Diagnostics | Recording at startup, status cadence, logs and reconnect/reset tools |
 
-For stress testing, use `Start Stress Test.cmd` in the portable folder. It loads
-the supplied Sample layout and enables diagnostic recording. The bottom bar shows
-REC. Logs remain in `diagnostics/`, readable while the app is running. You can
-also toggle recording in Status. The source includes `scripts/analyze-performance.ps1`
-to summarize a saved JSONL log.
+Changes take effect on Enter or leaving an editor; there are no Apply buttons.
+Invalid values are rejected. Encoder/canvas changes restart an active encoded
+stream. GPU changes restart playback and disarm MIDI. Personal preferences save on
+this computer automatically; show settings belong to the current .stageflow file.
 
-Managed crashes also save a `Crash-*.txt` report with the full exception and build
-version. If the app folder is read-only, crash reports use
-`%LOCALAPPDATA%\StageFlow\diagnostics`. Keep these reports with the performance log.
+V2 keeps its preferences/recovery/recent files in **%LOCALAPPDATA%/StageFlowV2**.
+Opening a v1 project migrates it in memory and asks for a new save location. V2
+schema-2 shows should not be opened in v1. Show saves are atomic and retain a .bak.
+
+## Video routes
+
+| Protocol | Input | Program output | Audio |
+|---|---|---|---|
+| Spout | Named shared texture | Named shared texture | No audio in the protocol |
+| NDI | Source discovery or manual source | Named LAN sender | Stereo PCM |
+| OMT | Source discovery or manual source | Named LAN sender | Stereo PCM |
+| SRT | URL, hardware-decoded live layer | MPEG-TS destination URL | AAC input/output |
+| RTMP / RTMPS | — | FLV destination URL | AAC |
+| HLS | — | Built-in HTTP server and player | AAC |
+
+Live-source audio starts disabled to avoid feedback; enable it per layer in
+Inspector. It mixes with the movie before independent local/program gain controls.
+Inputs retry after disconnect. Network output errors appear in Monitor; stop/start
+stream or reconnect routes to retry a failed output.
+
+Choose **h264_nvenc**, **hevc_nvenc**, or **libx264** under Encoding. HLS, RTMP and
+SRT share one encoded video/audio program. RTMP requires H.264. HEVC playback depends
+on the receiver; H.264/AAC is the browser compatibility default. Per-destination
+transcoding, AMF and QSV are not implemented.
+
+For RTMP enter the complete endpoint including the stream key. For SRT use a URL
+such as srt://receiver:9001?mode=caller&latency=120000. The latency value is in
+microseconds. Destinations are stored in the show file, including any keys in URLs.
+
+Default HLS player: http://127.0.0.1:8888/; playlist: /live/index.m3u8.
+**Player ↗** opens the local viewer. Remote clients use this PC's LAN address and
+the selected port. HLS is conventional segmented HTTP playback, with seconds of
+latency. The server has no login/TLS; firewall/router settings are not changed.
+Browser audio needs a user Play gesture. NDI® is a registered trademark of Vizrt NDI AB.
+
+## OSC controls
+
+Enable the OSC receiver in Preferences, then open the **OSC** workspace tab.
+Add a mapping, type an exact address (or Learn the next message), select an action
+and trigger. Use More → Bind selected layer for layer actions. Example: map
+**/project/record → Play → RisingEdge** for an OSC Pilot button. The address is
+user-defined; the chosen action determines what it does.
+
+Actions cover transport, seeks, cue navigation, volumes/mutes, layer visibility/
+opacity, streams and diagnostic recording. Value mappings scale a normalized input
+through configured minimum/maximum values. Press/RisingEdge prevent button-release
+messages from triggering a second action. OSC bundles and bounded future timetags
+are supported. Address wildcards, outgoing feedback and MIDI control mapping are
+not implemented in this build.
+
+## Keyboard and recovery
+
+- Space: play/pause. Left/right: one source frame. F11: full screen.
+- Drag the timeline or enter HH:MM:SS:FF in Go to; drop-frame uses HH:MM:SS;FF.
+- M: add marker; double-click to locate; right-click to rename/remove.
+- Ctrl+Up/Down: previous/next cue. I/O: loop in/out. L: toggle loop.
+- Ctrl+S / Ctrl+Shift+S: save / save as. Ctrl+O: movie. Ctrl+Shift+O: show. Ctrl+N: new.
+- Ctrl+Z/Y: show undo/redo; text editors keep their own undo. Ctrl+,: Preferences.
+- Drop a movie, show or Hnode file onto the window to open it.
+
+Use Monitor to record performance, inspect route errors, reconnect devices or
+clear DMX. **Start Stress Test.cmd** opens the supplied layout with recording on.
+JSONL logs live in diagnostics/ and can be read while recording. Managed crashes
+include full stacks and build version; read-only installs use the StageFlowV2
+LocalAppData fallback. The source includes scripts/analyze-performance.ps1.
 
 ## Build and modify
 
-Use Windows x64 and .NET SDK 10.0.401 or a compatible .NET 10 SDK:
+Use Windows x64 and .NET SDK 10.0.401 (or a compatible .NET 10 SDK):
 
-```powershell
+~~~powershell
 .\scripts\prepare-native.ps1
-.\scripts\build.ps1 -Test -EngineTest -UiTest
+.\scripts\prepare-network.ps1 -NdiRuntimeDirectory 'C:\path\to\NDI runtime'
+.\scripts\build.ps1 -Test -EngineTest -UiTest -ProtocolTest -ArtifactsPath .\artifacts
 .\scripts\package.ps1
-```
+~~~
 
-Native preparation downloads a pinned, SHA-256 checked OBS dependency release;
-only DLLs are copied. No OBS program is included or launched. Portable publishing
-bundles .NET and ASP.NET. On another PC the Microsoft Visual C++ x64 runtime may
-also be required. Versions and provenance are in `native-manifest.json` and `licenses/`.
+The delivered runtime folder is already prepared. For a fresh source checkout,
+prepare-network obtains pinned OMT binaries and takes the official NDI 6.3.2 DLL
+from the supplied directory or NDI_RUNTIME_DIR_V6; it checks all hashes. Download
+that runtime from https://ndi.link/NDIRedistV6. Native media preparation uses pinned
+OBS dependency DLLs; the OBS application is not included. A VC++ x64 runtime may be
+needed on a fresh PC. Manifests and third-party notices accompany the portable app.
 
-See [architecture](docs/ARCHITECTURE.md), [compatibility](docs/COMPATIBILITY.md),
-[validation](docs/VALIDATION.md) and [upstream attribution](docs/UPSTREAM.md).
+Build artifacts can be redirected so developing v2 does not overwrite a running
+preview. Package defaults to StageFlow-v2-Portable and rejects the frozen v1 paths.
+Application version lives in Directory.Build.props; build-info.json records the
+packaged source commit. Keep schema migration and tests with behavior changes.
 
-StageFlow source is GPL-3.0-or-later; see `LICENSE`. Third-party components retain
-their own notices. Source, lock files, build scripts, native build recipes and
-source references accompany the portable app.
+See [architecture](docs/ARCHITECTURE.md), [review](docs/V2-REVIEW.md),
+[compatibility](docs/COMPATIBILITY.md), and [upstream notices](docs/UPSTREAM.md).
+StageFlow source is GPL-3.0-or-later; bundled libraries retain their own terms.
+NDI's proprietary runtime is covered by its included agreement, not StageFlow's license.

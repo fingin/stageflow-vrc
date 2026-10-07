@@ -1,0 +1,14 @@
+{
+  "ndi": {
+    "version": "6.3.2.0", "source": "https://ndi.link/NDIRedistV6",
+    "archiveSha256": "7EE73EEDB56402BCA5100868353DBAB4E944B6C37D2D9881580698A3B61346CD",
+    "dllSha256": "2B6602075868BA4401F82F417D72424805D69B11CA86078023D0D489FF45DD84",
+    "license": "licenses/ndi/NDI License Agreement.pdf", "notice": "NDI is a registered trademark of Vizrt NDI AB. Runtime retains its own proprietary license."
+  },
+  "omt": {
+    "version": "1.0.0.19", "source": "https://github.com/openmediatransport/libomtnet/releases/download/v1.0.0.19/OpenMediaTransport.Binaries.Release.v1.0.0.19.zip",
+    "archiveSha256": "C62460174499DABE703E3E57372DAF5F1DD95F890355D11E30052B9ED35BDAC4",
+    "dllSha256": "673B1D33222295F1C9190C54CEFC89D5E322301702532E2C8FE78A16E8AA28DA",
+    "vmxSha256": "EFFD2EB33A85689DA940AB6744CF8931448445144C5D7991AC50908800AF19BE", "license": "licenses/omt/LICENSE.txt"
+  }
+}

@@ -1,220 +1,313 @@
-using StageFlow.Core.Grid;
+using System.Reflection;
 using StageFlow.Core.Projects;
-using StageFlow.Core.Timing;
 using StageFlow.Engine.Audio;
 using StageFlow.Engine.Midi;
 using StageFlow.Engine.Spout;
 using StageFlow.Engine.Graphics;
-
 namespace StageFlow.App;
 
 public sealed partial class MainWindow
 {
-    private readonly TabControl _inspectorTabs = new() { Dock = DockStyle.Fill };
-    private readonly TextBox _layerName = Theme.TextBox(), _label = Theme.TextBox(), _font = Theme.TextBox("Consolas"),
-        _textColor = Theme.TextBox("#FFFFFFFF"), _backgroundColor = Theme.TextBox("#AA000000");
-    private readonly NumericUpDown _x = Number(-8192, 8192), _y = Number(-8192, 8192), _width = Number(1, 8192), _height = Number(1, 8192),
-        _opacity = Number(0, 100, 100), _fontSize = Number(8, 256, 48), _cropL = Number(0, 8192), _cropT = Number(0, 8192), _cropR = Number(0, 8192), _cropB = Number(0, 8192);
-    private readonly CheckBox _visible = Check("Visible", true), _locked = Check("Lock position"), _gamma = Check("VRSL gamma correction", true),
-        _rgb = Check("VRSL RGB packing"), _maskZero = Check("Make zero channels transparent");
-    private readonly ComboBox _gridEncoding = Combo(Enum.GetNames<GridEncoding>()), _orientation = Combo(Enum.GetNames<GridOrientation>());
-    private readonly ComboBox _clockMode = Combo(Enum.GetNames<ClockMode>()), _mtcRate = Combo(Enum.GetNames<MtcRate>()),
-        _midiInput = Combo(), _midiOutput = Combo(), _audioDevice = Combo();
-    private readonly TextBox _tcOffset = Theme.TextBox("00:00:00:00"), _artnetBind = Theme.TextBox("127.0.0.1");
-    private readonly NumericUpDown _localVolume = Number(0, 100, 100), _streamVolume = Number(0, 100, 100),
-        _audioOffset = Number(-5000, 5000), _mtcOffset = Number(-5000, 5000), _artnetPort = Number(1, 65535, 6454),
-        _firstUniverse = Number(0, 32767), _universeCount = Number(1, 512, 48);
-    private readonly CheckBox _mtcEnabled = Check("Send master MTC"), _scrubMtc = Check("Send MTC while scrubbing"),
-        _localMute = Check("Mute local audio"), _streamMute = Check("Mute stream audio"), _artnetEnabled = Check("Receive Art-Net"), _autoUniverses = Check("Use received universe extent", true);
-    private readonly NumericUpDown _outputW = Number(16, 8192, 1920), _outputH = Number(16, 8192, 1080), _outputFps = Number(1, 120, 60),
-        _bitrate = Number(500, 200000, 12000), _serverPort = Number(1, 65535, 8888);
-    private readonly TextBox _serverBind = Theme.TextBox("0.0.0.0");
-    private readonly ComboBox _spoutInput = Combo(), _midiDmxOutput = Combo();
-    private readonly ComboBox _gpuChoice = Combo();
-    private readonly CheckBox _spoutOutputEnabled = Check("Publish composite as Spout"), _midiDmxEnabled = Check("Art-Net → MIDI-DMX"), _editorLog = Check("Use Unity Editor log");
-    private readonly TextBox _spoutName = Theme.TextBox("StageFlow Program"), _logPath = Theme.TextBox();
-    private readonly NumericUpDown _midiBudget = Number(3, 1000, 100), _midiIdle = Number(0, 1000, 10), _outputDen = Number(1, 1001, 1);
+    private readonly WorkspaceTabs _inspectorTabs = new() { Dock = DockStyle.Fill };
+    private readonly PropertyGrid _properties = CreatePropertyGrid();
+    private readonly ComboBox _scope = new ThemedComboBox() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Top, Height = 32, FlatStyle = FlatStyle.Flat, BackColor = Theme.Input, ForeColor = Theme.Text };
+    private readonly TextBox _propertySearch = Theme.TextBox();
+    private readonly TextBox _diagnostics = new() { Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, ForeColor = Theme.Muted, Font = new Font("Consolas", 9) };
+    private readonly Label _liveState = Theme.Label("Live inspector", true);
     private List<AudioDevice> _audioDevices = [];
-    private readonly Label _layerHint = Theme.Label("Select a layer to edit", true);
-    private readonly Label _diagnostics = new() { AutoSize = false, Width = 238, Height = 290, ForeColor = Theme.Text };
-
-    private static NumericUpDown Number(decimal min, decimal max, decimal initial = 0) => new()
-    { Minimum = min, Maximum = max, Value = Math.Clamp(initial, min, max), Width = 130, BackColor = Theme.Input, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
-    private static CheckBox Check(string text, bool value = false) => new() { Text = text, Checked = value, AutoSize = true, ForeColor = Theme.Text, Margin = new Padding(3, 7, 3, 7) };
-    private static ComboBox Combo(params string[] values)
+    private string[] _midiInputs = [], _midiOutputs = [], _spoutSenders = [], _gpus = [], _fonts = [];
+    private ShowProject? _pendingProject;
+    private ShowProject? _liveInFlight;
+    private string _pendingEditName = "Edit properties";
+    private readonly System.Windows.Forms.Timer _liveTimer = new() { Interval = 40 };
+    private bool _liveBusy, _projectOperation;
+    private AppPreferences _preferences = new();
+    internal ShowProject WorkingProject => _pendingProject ?? _liveInFlight ?? _project;
+    private string? _inspectorIdentity;
+    private static readonly MethodInfo CloneRecord = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    private static PropertyGrid CreatePropertyGrid() => new()
     {
-        var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235, BackColor = Theme.Input, ForeColor = Theme.Text, FlatStyle = FlatStyle.Flat };
-        box.Items.AddRange(values); if (values.Length > 0) box.SelectedIndex = 0; return box;
-    }
-    private FlowLayoutPanel Tab(string name)
-    {
-        var page = new TabPage(name) { BackColor = Theme.Panel, ForeColor = Theme.Text, Padding = new Padding(5) };
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(5) };
-        page.Controls.Add(panel); _inspectorTabs.TabPages.Add(page); return panel;
-    }
-    private static void Field(FlowLayoutPanel panel, string name, Control control)
-    { panel.Controls.Add(Theme.Label(name, true)); panel.Controls.Add(control); }
+        Dock = DockStyle.Fill, ToolbarVisible = false, HelpVisible = true, PropertySort = PropertySort.Categorized,
+        BackColor = Theme.Panel, ViewBackColor = Theme.Panel, ViewForeColor = Theme.Text, LineColor = Theme.Border,
+        CategoryForeColor = Theme.Accent, CategorySplitterColor = Theme.Border, HelpBackColor = Theme.Panel,
+        HelpForeColor = Theme.Muted, HelpBorderColor = Theme.Border, SelectedItemWithFocusBackColor = Theme.Selection,
+        SelectedItemWithFocusForeColor = Color.White, Font = new Font("Segoe UI", 10)
+    };
     private void BuildInspector()
     {
-        var layer = Tab("Layer"); layer.Controls.Add(_layerHint);
-        Field(layer, "Name", _layerName); layer.Controls.Add(_visible); layer.Controls.Add(_locked);
-        Field(layer, "X · pixels", _x); Field(layer, "Y · pixels", _y); Field(layer, "Width", _width); Field(layer, "Height", _height); Field(layer, "Opacity · %", _opacity);
-        Field(layer, "Crop left / top / right / bottom", _cropL); layer.Controls.Add(_cropT); layer.Controls.Add(_cropR); layer.Controls.Add(_cropB);
-        Field(layer, "Clock label", _label); Field(layer, "Font family", _font); Field(layer, "Font size · pixels", _fontSize);
-        Field(layer, "Text color · #AARRGGBB", _textColor); Field(layer, "Background · #AARRGGBB", _backgroundColor);
-        Field(layer, "Grid encoding", _gridEncoding); Field(layer, "Grid orientation", _orientation); layer.Controls.Add(_gamma); layer.Controls.Add(_rgb); layer.Controls.Add(_maskZero);
-        Field(layer, "Spout source", _spoutInput);
-        layer.Controls.Add(Theme.Button("Apply layer", async (_, _) => await ApplyLayer(), true));
-        layer.Controls.Add(Theme.Button("Fit movie to canvas", async (_, _) => await FitLayer()));
-        var routes = Tab("Routing");
-        Field(routes, "Clock source", _clockMode); Field(routes, "MTC frame rate", _mtcRate); Field(routes, "Show start timecode", _tcOffset);
-        Field(routes, "MTC input", _midiInput); Field(routes, "MTC output → grandMA2", _midiOutput); routes.Controls.Add(_mtcEnabled); routes.Controls.Add(_scrubMtc);
-        Field(routes, "MTC output offset · ms", _mtcOffset); Field(routes, "Local audio device", _audioDevice);
-        Field(routes, "Local volume · %", _localVolume); routes.Controls.Add(_localMute); Field(routes, "Stream volume · %", _streamVolume); routes.Controls.Add(_streamMute);
-        Field(routes, "Audio offset · ms", _audioOffset); routes.Controls.Add(_artnetEnabled); Field(routes, "Art-Net bind IPv4", _artnetBind); Field(routes, "Art-Net port", _artnetPort);
-        Field(routes, "First universe · zero-based", _firstUniverse); Field(routes, "Universe capacity", _universeCount); routes.Controls.Add(_autoUniverses);
-        routes.Controls.Add(Theme.Button("Apply routing", async (_, _) => await ApplyRoutes(), true)); routes.Controls.Add(Theme.Button("Refresh devices", (_, _) => { PopulateRoutes(); BindRoutes(); }));
-        routes.Controls.Add(Theme.Label("GRIDNODE MIDI-DMX", true)); routes.Controls.Add(_midiDmxEnabled);
-        Field(routes, "MIDI-DMX output → gridnode", _midiDmxOutput); Field(routes, "Messages per world update", _midiBudget); Field(routes, "Idle channel refresh", _midiIdle);
-        routes.Controls.Add(_editorLog); Field(routes, "Log override · blank = automatic", _logPath);
-        routes.Controls.Add(Theme.Button("Apply MIDI-DMX", async (_, _) => await Edit("Change MIDI-DMX", _project with { MidiDmx = _project.MidiDmx with
-        { Enabled = _midiDmxEnabled.Checked, OutputDevice = _midiDmxOutput.SelectedIndex <= 0 ? null : (string)_midiDmxOutput.SelectedItem!,
-            ChannelsPerUpdate = (int)_midiBudget.Value, IdleScanChannels = (int)_midiIdle.Value, UseEditorLog = _editorLog.Checked,
-            LogPath = string.IsNullOrWhiteSpace(_logPath.Text) ? null : _logPath.Text } }), true));
-        var output = Tab("Output");
-        Field(output, "GPU · changing restarts playback", _gpuChoice);
-        _outputFps.Maximum = 120000;
-        Field(output, "Canvas width", _outputW); Field(output, "Canvas height", _outputH); Field(output, "FPS numerator · e.g. 60 or 30000", _outputFps); Field(output, "FPS denominator · e.g. 1 or 1001", _outputDen);
-        Field(output, "Video bitrate · Kbps", _bitrate); Field(output, "HTTP bind address", _serverBind); Field(output, "HTTP port", _serverPort);
-        output.Controls.Add(_spoutOutputEnabled); Field(output, "Spout program name", _spoutName);
-        output.Controls.Add(Theme.Label("Hardware H.264 + AAC\nHLS server runs inside StageFlow", true));
-        output.Controls.Add(Theme.Button("Apply output", async (_, _) => await ApplyOutput(), true));
-        output.Controls.Add(Theme.Button("Copy HLS URL", (_, _) => Clipboard.SetText($"http://127.0.0.1:{_project.Stream.Port}/live/index.m3u8")));
-        output.Controls.Add(Theme.Button("Open player", (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"http://127.0.0.1:{_project.Stream.Port}/") { UseShellExecute = true })));
-        output.Controls.Add(Theme.Button("Save program frame…", async (_, _) => await SaveFrame()));
-        output.Controls.Add(Theme.Label("SHORTCUTS\nSpace  Play / pause\n← / →  Frame step\nM  Add marker\nI / O  Loop in / out\nL  Toggle loop\nCtrl+S  Save show\nCtrl+Z / Ctrl+Y  Undo / redo\nF11  Full screen\n\nDrop a movie or show file to open it.", true));
-        var diagnostics = Tab("Status"); diagnostics.Controls.Add(_diagnostics);
-        _recordLabel.MaximumSize = new Size(235, 0);
-        diagnostics.Controls.Add(_recordLabel); diagnostics.Controls.Add(_recordButton);
+        _properties.Resize += (_, _) => _properties.HelpVisible = _properties.Height >= 240;
+        _uiTimer.Interval = Math.Clamp(_preferences.UiRefreshMilliseconds, 33, 1000);
+        _autosave.Interval = Math.Clamp(_preferences.AutosaveSeconds, 5, 600) * 1000;
+        _liveTimer.Tick += async (_, _) => await FlushLiveEdits();
+        Disposed += (_, _) => _liveTimer.Dispose();
+        var inspector = new Panel { Text = "Inspector", BackColor = Theme.Panel, Padding = new Padding(10) };
+        _scope.Items.AddRange(["Selection", "Show & canvas"]);
+        _scope.SelectedIndex = 0; _scope.SelectedIndexChanged += (_, _) => BindInspector();
+        _propertySearch.Dock = DockStyle.Top; _propertySearch.PlaceholderText = "Search properties…";
+        _propertySearch.TextChanged += (_, _) => { if (_properties.SelectedObject is LiveProperties rows) { rows.Filter = _propertySearch.Text; _properties.Refresh(); } };
+        _liveState.Dock = DockStyle.Bottom; _liveState.Height = 38; _liveState.AutoSize = false;
+        inspector.Controls.Add(_properties); inspector.Controls.Add(_propertySearch); inspector.Controls.Add(_scope); inspector.Controls.Add(_liveState);
+        _inspectorTabs.TabPages.Add(inspector);
+        var status = new Panel { Text = "Monitor", BackColor = Theme.Panel, Padding = new Padding(10) };
+        var actions = new ActionFlowPanel { Dock = DockStyle.Bottom, Height = 130 };
+        actions.RequiredHeightChanged += height => actions.Height = height;
+        _recordLabel.Dock = DockStyle.Bottom; _recordLabel.Height = 45; _recordLabel.AutoSize = false; _recordLabel.AutoEllipsis = true; actions.Controls.Add(_recordButton);
         _recordButton.Click += (_, _) => ToggleRecording();
-        diagnostics.Controls.Add(Theme.Button("Open diagnostic logs", (_, _) =>
-        { Directory.CreateDirectory(_diagnosticFolder); System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_diagnosticFolder) { UseShellExecute = true }); }));
-        diagnostics.Controls.Add(Theme.Button("Reconnect routes", async (_, _) => await Guard(() => _engine!.ReconnectRoutesAsync())));
-        diagnostics.Controls.Add(Theme.Button("Reset counters", async (_, _) => await Guard(() => _engine!.ResetDiagnosticsAsync())));
-        diagnostics.Controls.Add(Theme.Button("Clear received DMX", async (_, _) => await Guard(() => _engine!.BlackoutDmxAsync())));
-        diagnostics.Controls.Add(Theme.Label("MTC → grandMA2\ngrandMA2 Art-Net → grid / MIDI-DMX\nMovie audio → local output + HLS\n\nMIDI outputs start disarmed.\nArt-Net addresses are zero-based.\nSpout applications must share a GPU.", true));
+        actions.Controls.Add(Theme.Button("Open logs", (_, _) => { Directory.CreateDirectory(_diagnosticFolder); OpenExternal(_diagnosticFolder); }));
+        actions.Controls.Add(Theme.Button("Clear DMX", async (_, _) => await Guard(() => _engine!.BlackoutDmxAsync())));
+        status.Controls.Add(_diagnostics); status.Controls.Add(actions); status.Controls.Add(_recordLabel); _inspectorTabs.TabPages.Add(status);
+        BuildOscPanel();
     }
+    private static void OpenExternal(string path) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+    private void Inspect(string scope) { if (!_scope.Items.Contains(scope)) { ShowPreferences(scope switch { "Outputs" => "Encoding", _ => scope }); return; } _scope.SelectedItem = scope; _inspectorTabs.SelectedIndex = 0; BindInspector(); }
     private void BindInspector()
     {
         _engine?.SelectLayer(_selected);
-        _binding = true;
-        if (SelectedLayer is { } layer)
+        string identity = _scope.SelectedIndex + ":" + _selected + ":" + WorkingProject.Layers.FirstOrDefault(l => l.Id == _selected)?.Kind;
+        if (_inspectorIdentity == identity) { if (!_properties.ContainsFocus) _properties.Refresh(); return; }
+        _inspectorIdentity = identity;
+        var bag = new LiveProperties(_scope.Text) { Filter = _propertySearch.Text };
+        switch (_scope.SelectedIndex)
         {
-            _layerHint.Text = layer.Kind == LayerKind.Grid ? "Data layer · native pixel geometry" : layer.Kind + " layer";
-            _layerName.Text = layer.Name; _visible.Checked = layer.Visible; _locked.Checked = layer.Locked;
-            Set(_x, layer.X); Set(_y, layer.Y); Set(_width, layer.Width); Set(_height, layer.Height); Set(_opacity, layer.Opacity * 100);
-            _width.Enabled = _height.Enabled = layer.Kind != LayerKind.Grid;
-            Set(_cropL, layer.CropLeft); Set(_cropT, layer.CropTop); Set(_cropR, layer.CropRight); Set(_cropB, layer.CropBottom);
-            _label.Text = layer.Label; _font.Text = layer.FontFamily; Set(_fontSize, layer.FontSize); _textColor.Text = layer.TextColor; _backgroundColor.Text = layer.BackgroundColor;
-            SelectDevice(_spoutInput, layer.SpoutSender);
-            if (layer.Grid is { } grid) { _gridEncoding.SelectedItem = grid.Encoding.ToString(); _orientation.SelectedItem = grid.Orientation.ToString(); _gamma.Checked = grid.GammaCorrection; _rgb.Checked = grid.RgbPacking; _maskZero.Checked = grid.MaskZero; }
+            case 0:
+                if (WorkingProject.Layers.FirstOrDefault(l => l.Id == _selected) is { } layer)
+                {
+                    Guid id = layer.Id;
+                    void LayerChange(ShowProject p, Layer changed) => QueueLive("Edit " + changed.Name, p with { Layers = p.Layers.Select(l => l.Id == id ? changed : l).ToList() });
+                    AddRecord(bag, "01 · Object", () => WorkingProject.Layers.First(l => l.Id == id), (p, v) => LayerChange(p, v),
+                        ["Id", "Grid", "SpoutSender", "FontFamily", "FontSize", "TextColor", "BackgroundColor", "Label", "Kind", "NetworkProtocol", "NetworkSource", "LiveAudioEnabled", "LiveAudioVolume"]);
+                    if (layer.Kind == LayerKind.Network)
+                        AddRecord(bag, "02 · Live source", () => WorkingProject.Layers.First(l => l.Id == id), (p, v) => LayerChange(p, v),
+                            include: ["NetworkProtocol", "NetworkSource", "LiveAudioEnabled", "LiveAudioVolume"]);
+                    if (layer.Kind == LayerKind.Timecode)
+                        AddRecord(bag, "02 · Timecode appearance", () => WorkingProject.Layers.First(l => l.Id == id), (p, v) => LayerChange(p, v),
+                            include: ["FontFamily", "FontSize", "TextColor", "BackgroundColor", "Label"]);
+                    if (layer.Kind == LayerKind.Spout)
+                        bag.Add("SpoutSender", "02 · Source", typeof(string), () => WorkingProject.Layers.First(l => l.Id == id).SpoutSender,
+                            v => LayerChange(WorkingProject, WorkingProject.Layers.First(l => l.Id == id) with { SpoutSender = (string?)v }), options: _spoutSenders);
+                    if (layer.Grid != null)
+                    {
+                        AddRecord(bag, "03 · Data grid", () => WorkingProject.Layers.First(l => l.Id == id).Grid!, (p, v) => LayerChange(p, p.Layers.First(l => l.Id == id) with { Grid = v, Width = v.Width, Height = v.Height }), ["Masks"]);
+                        bag.Add("Channel masks", "03 · Data grid", typeof(string), () => string.Join(", ", WorkingProject.Layers.First(l => l.Id == id).Grid!.Masks.Select(r => r.Start == r.End ? r.Start.ToString() : r.Start + "-" + r.End)), value =>
+                        {
+                            var ranges = new List<StageFlow.Core.Grid.ChannelRange>();
+                            foreach (string token in ((string?)value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            {
+                                string[] range = token.Split('-', StringSplitOptions.TrimEntries);
+                                if (range.Length > 2) throw new InvalidDataException("Use channel indices or ranges, for example 0-15, 64, 100-120.");
+                                int first = HnodeImporter.ParseChannel(range[0]), last = range.Length == 2 ? HnodeImporter.ParseChannel(range[1]) : first;
+                                ranges.Add(new(first,last));
+                            }
+                            var current = WorkingProject.Layers.First(l => l.Id == id); LayerChange(WorkingProject, current with { Grid = current.Grid! with { Masks = ranges } });
+                        }, "Zero-based channel indices/ranges, separated by commas. Hnode universe.channel notation also works. Empty means no masks.");
+                    }
+                }
+                else bag.Add("Selection", "Inspector", typeof(string), () => "Select a layer in the hierarchy or preview", null);
+                break;
+            case 1: AddRecord(bag, "01 · Show", () => WorkingProject, (_, v) => QueueLive("Edit show", v), include: ["Name", "Width", "Height", "FpsNumerator", "FpsDenominator", "GpuAdapter"]); break;
+
         }
-        else _layerHint.Text = "Select a layer to edit";
-        _binding = false;
+        _properties.SelectedObject = bag;
     }
-    private static void Set(NumericUpDown control, double value) => control.Value = Math.Clamp((decimal)value, control.Minimum, control.Maximum);
-    private async Task ApplyLayer()
+    private void AddRecord<T>(LiveProperties bag, string category, Func<T> get, Action<ShowProject, T> commit, string[]? exclude = null, string[]? include = null) where T : class
     {
-        if (SelectedLayer is not { } layer) return;
-        var changed = layer with
+        foreach (var property in typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
-            Name = _layerName.Text, Visible = _visible.Checked, Locked = _locked.Checked, X = (double)_x.Value, Y = (double)_y.Value,
-            Width = (double)_width.Value, Height = (double)_height.Value, Opacity = (double)_opacity.Value / 100,
-            CropLeft = (int)_cropL.Value, CropTop = (int)_cropT.Value, CropRight = (int)_cropR.Value, CropBottom = (int)_cropB.Value,
-            Label = _label.Text, FontFamily = _font.Text, FontSize = (int)_fontSize.Value, TextColor = _textColor.Text, BackgroundColor = _backgroundColor.Text,
-            SpoutSender = _spoutInput.SelectedIndex <= 0 ? null : (string)_spoutInput.SelectedItem!,
-            Grid = layer.Grid is { } grid ? grid with { Encoding = Enum.Parse<GridEncoding>((string)_gridEncoding.SelectedItem!),
-                Orientation = Enum.Parse<GridOrientation>((string)_orientation.SelectedItem!), GammaCorrection = _gamma.Checked, RgbPacking = _rgb.Checked, MaskZero = _maskZero.Checked } : null
-        };
-        await Edit("Edit layer", _project with { Layers = _project.Layers.Select(l => l.Id == layer.Id ? changed : l).ToList() });
+            if (!property.CanWrite || exclude?.Contains(property.Name) == true || include != null && !include.Contains(property.Name)) continue;
+            if (property.Name == "DeviceId")
+            {
+                string Friendly(AudioDevice device) => _audioDevices.Count(d => d.Name == device.Name) > 1 ? device.Name + " [" + device.Id[^Math.Min(8, device.Id.Length)..] + "]" : device.Name;
+                bag.Add("Local audio device", category, typeof(string), () =>
+                {
+                    string? id = property.GetValue(get()) as string;
+                    return id == null ? "(default)" : _audioDevices.FirstOrDefault(d => d.Id == id) is { } device ? Friendly(device) : id;
+                }, value =>
+                {
+                    string? label = value as string;
+                    string? id = label == null || label == "(default)" ? null : _audioDevices.FirstOrDefault(d => Friendly(d) == label)?.Id ?? label;
+                    var changed = (T)CloneRecord.Invoke(get(), null)!; property.SetValue(changed, id); commit(WorkingProject, changed);
+                }, "Select the local monitoring output. Stream audio has independent volume and mute controls.", ["(default)", .. _audioDevices.Select(Friendly)]);
+                continue;
+            }
+            string[]? choices = property.Name switch
+            {
+                "MidiInput" => ["(default)", .. _midiInputs], "MidiOutput" or "OutputDevice" => ["(default)", .. _midiOutputs],
+                "GpuAdapter" => ["(default)", .. _gpus], "DeviceId" => ["(default)", .. _audioDevices.Select(d => d.Id)],
+                "Encoder" => ["h264_nvenc", "hevc_nvenc", "libx264"], "FontFamily" => _fonts, _ => null
+            };
+            bool lockedSize = typeof(T) == typeof(Layer) && get() is Layer { Kind: LayerKind.Grid } && property.Name is "Width" or "Height";
+            bag.Add(property.Name, category, property.PropertyType, () => property.GetValue(get()), lockedSize ? null : value =>
+            {
+                var changed = (T)CloneRecord.Invoke(get(), null)!;
+                property.SetValue(changed, value); commit(WorkingProject, changed);
+            }, description: SettingHelp.Describe(typeof(T), property.Name), options: choices);
+        }
     }
+    private void QueueLive(string name, ShowProject next)
+    {
+        if (_projectOperation) throw new InvalidOperationException("Wait for the current show operation to finish before editing settings.");
+        next.Validate(); _pendingProject = next; _pendingEditName = name; _dirty = true;
+        SetLiveFeedback("Updating…"); if (!_liveTimer.Enabled) _liveTimer.Start();
+    }
+    private void SetLiveFeedback(string message, bool error = false)
+    {
+        _liveState.Text = message; _liveState.ForeColor = error ? Theme.Warning : Theme.Muted;
+        if (_preferencesFeedback is { IsDisposed: false }) { _preferencesFeedback.Text = message; _preferencesFeedback.ForeColor = _liveState.ForeColor; }
+    }
+    private async Task FlushLiveEdits()
+    {
+        if (_liveBusy) return;
+        _liveTimer.Stop(); if (_pendingProject == null) return;
+        _liveBusy = true; var next = _pendingProject; _pendingProject = null; _liveInFlight = next;
+        try { await CommitProject(_pendingEditName, next); SetLiveFeedback("Live · changes updated"); }
+        catch (Exception ex) { SetLiveFeedback(ex.Message, true); }
+        finally { _liveInFlight = null; _liveBusy = false; if (!_properties.ContainsFocus) _properties.Refresh(); if (_preferencesGrid?.ContainsFocus == false) _preferencesGrid.Refresh(); if (_pendingProject != null) _liveTimer.Start(); }
+    }
+    internal async Task DrainLiveEdits()
+    {
+        while (_liveBusy || _pendingProject != null)
+        { if (_liveBusy) await Task.Delay(5); else await FlushLiveEdits(); }
+    }
+    private async Task RunProjectOperation(Func<Task> action)
+    {
+        await DrainLiveEdits(); _projectOperation = _liveBusy = true;
+        _workspace.Enabled = false; if (_preferencesWindow != null) _preferencesWindow.Enabled = false;
+        try { await action(); }
+        finally
+        {
+            _projectOperation = _liveBusy = false; _workspace.Enabled = true;
+            if (_preferencesWindow != null) _preferencesWindow.Enabled = true;
+            RefreshProjectUi(); if (_pendingProject != null) _liveTimer.Start();
+        }
+    }
+    private async Task CommitProject(string name, ShowProject next, bool recordHistory = true)
+    {
+        next.Validate();
+        bool restart = false;
+        if (_engine != null)
+        {
+            await _engine.Ready;
+            restart = _engine.Status.Streaming && (next.Stream != _project.Stream || !next.NetworkOutputs.SequenceEqual(_project.NetworkOutputs) || next.Width != _project.Width || next.Height != _project.Height || next.FpsNumerator != _project.FpsNumerator || next.FpsDenominator != _project.FpsDenominator || next.GpuAdapter != _project.GpuAdapter);
+            if (restart) await _engine.StopStreamAsync();
+            try
+            {
+                if (next.GpuAdapter != _project.GpuAdapter) await RestartEngine(next); else await _engine.SetProjectAsync(next);
+            }
+            catch { _pendingProject = null; throw; }
+        }
+        ConfigureOsc(next.Osc);
+        if (recordHistory) _history.Apply(name, next);
+        _project = next; _dirty = true; RefreshProjectUi();
+        // The project is already applied even if an output cannot reopen. Preserve that
+        // state in the inspector/history and leave the failed output stopped for repair.
+        if (restart)
+        {
+            try { await _engine!.StartStreamAsync(); }
+            catch (Exception ex) { _status.Text = "Settings updated; stream restart failed: " + ex.Message; }
+        }
+    }
+    private void PopulateRoutes()
+    {
+        using (var installed = new System.Drawing.Text.InstalledFontCollection()) _fonts = installed.Families.Select(f => f.Name).OrderBy(n => n).ToArray();
+        _midiInputs = MidiDevices.Inputs().Select(d => d.Name).ToArray(); _midiOutputs = MidiDevices.Outputs().Select(d => d.Name).ToArray();
+        _spoutSenders = SpoutRegistry.Senders().ToArray(); _gpus = GpuDevice.EnumerateAdapters().Select(g => g.Name).Distinct().ToArray();
+        try { _audioDevices = LocalAudioOutput.Enumerate().ToList(); } catch { _audioDevices = []; }
+        _inspectorIdentity = null; BindInspector();
+    }
+    private async Task ReconnectRoutes()
+    {
+        await DrainLiveEdits(); _oscSettings = null; ConfigureOsc(_project.Osc);
+        await Guard(() => _engine!.ReconnectRoutesAsync()); PopulateRoutes();
+    }
+    private void BindRoutes() { BindInspector(); BindOscMappings(); }
     private async Task FitLayer()
     {
         if (SelectedLayer is not { Kind: LayerKind.Video } layer) return;
         var info = _engine?.MediaInfo;
         double scale = info == null ? 1 : Math.Min((double)_project.Width / info.Width, (double)_project.Height / info.Height);
         double width = info == null ? _project.Width : info.Width * scale, height = info == null ? _project.Height : info.Height * scale;
-        await Edit("Fit video", _project with { Layers = _project.Layers.Select(l => l.Id == layer.Id ? l with
+        await Edit("Fit video", WorkingProject with { Layers = WorkingProject.Layers.Select(l => l.Id == layer.Id ? l with
         { X = (_project.Width - width) / 2, Y = (_project.Height - height) / 2, Width = width, Height = height, CropLeft = 0, CropTop = 0, CropRight = 0, CropBottom = 0 } : l).ToList() });
     }
-    private void PopulateRoutes()
-    {
-        _midiInput.Items.Clear(); _midiInput.Items.Add("(none)"); foreach (var device in MidiDevices.Inputs()) _midiInput.Items.Add(device.Name);
-        _midiOutput.Items.Clear(); _midiOutput.Items.Add("(none)"); foreach (var device in MidiDevices.Outputs()) _midiOutput.Items.Add(device.Name);
-        _midiDmxOutput.Items.Clear(); _midiDmxOutput.Items.Add("(none)"); foreach (var device in MidiDevices.Outputs()) _midiDmxOutput.Items.Add(device.Name);
-        _spoutInput.Items.Clear(); _spoutInput.Items.Add("(none)"); foreach (var name in SpoutRegistry.Senders()) _spoutInput.Items.Add(name);
-        _gpuChoice.Items.Clear(); _gpuChoice.Items.Add("Automatic · most VRAM"); foreach (var name in GpuDevice.EnumerateAdapters().Select(a => a.Name).Distinct()) _gpuChoice.Items.Add(name);
-        try { _audioDevices = LocalAudioOutput.Enumerate().ToList(); } catch { _audioDevices = []; }
-        _audioDevice.Items.Clear(); _audioDevice.Items.Add("Default output"); foreach (var device in _audioDevices) _audioDevice.Items.Add(device.Name);
-        BindRoutes();
-    }
-    private static void SelectDevice(ComboBox combo, string? name)
-    {
-        int index = name == null ? -1 : combo.Items.IndexOf(name);
-        if (index < 0 && !string.IsNullOrEmpty(name)) { combo.Items.Add(name); index = combo.Items.Count - 1; }
-        combo.SelectedIndex = index >= 0 ? index : combo.Items.Count > 0 ? 0 : -1;
-    }
-    private void BindRoutes()
-    {
-        _clockMode.SelectedItem = _project.Clock.Mode.ToString(); _mtcRate.SelectedItem = _project.Clock.Rate.ToString();
-        _tcOffset.Text = Timecode.FromFrameNumber(_project.Clock.OffsetFrames, _project.Clock.Rate).ToString();
-        SelectDevice(_midiInput, _project.Clock.MidiInput); SelectDevice(_midiOutput, _project.Clock.MidiOutput);
-        _mtcEnabled.Checked = _project.Clock.OutputEnabled; _scrubMtc.Checked = _project.Clock.SendLocateDuringScrub; Set(_mtcOffset, _project.Clock.OutputOffsetMilliseconds);
-        int audio = _audioDevices.FindIndex(d => d.Id == _project.Audio.DeviceId); if (_audioDevice.Items.Count > 0) _audioDevice.SelectedIndex = audio + 1;
-        Set(_localVolume, _project.Audio.LocalVolume * 100); Set(_streamVolume, _project.Audio.StreamVolume * 100); Set(_audioOffset, _project.Audio.OffsetMilliseconds);
-        _localMute.Checked = _project.Audio.LocalMute; _streamMute.Checked = _project.Audio.StreamMute;
-        _artnetEnabled.Checked = _project.ArtNet.Enabled; _artnetBind.Text = _project.ArtNet.BindAddress; Set(_artnetPort, _project.ArtNet.Port);
-        Set(_firstUniverse, _project.ArtNet.FirstUniverse); Set(_universeCount, _project.ArtNet.UniverseCount); _autoUniverses.Checked = _project.ArtNet.AutomaticUniverseCount;
-        Set(_outputW, _project.Width); Set(_outputH, _project.Height); Set(_outputFps, _project.FpsNumerator); Set(_outputDen, _project.FpsDenominator);
-        Set(_bitrate, _project.Stream.VideoBitrateKbps); Set(_serverPort, _project.Stream.Port); _serverBind.Text = _project.Stream.BindAddress;
-        _spoutOutputEnabled.Checked = _project.Spout.OutputEnabled; _spoutName.Text = _project.Spout.OutputName;
-        SelectDevice(_gpuChoice, _project.GpuAdapter);
-        _midiDmxEnabled.Checked = _project.MidiDmx.Enabled; SelectDevice(_midiDmxOutput, _project.MidiDmx.OutputDevice);
-        Set(_midiBudget, _project.MidiDmx.ChannelsPerUpdate); Set(_midiIdle, _project.MidiDmx.IdleScanChannels);
-        _editorLog.Checked = _project.MidiDmx.UseEditorLog; _logPath.Text = _project.MidiDmx.LogPath;
-    }
-    private async Task ApplyRoutes()
-    {
-        var rate = Enum.Parse<MtcRate>((string)_mtcRate.SelectedItem!);
-        if (!Timecode.TryParse(_tcOffset.Text, rate, out var offset)) { _status.Text = "Invalid show start timecode."; return; }
-        await Edit("Change routing", _project with
-        {
-            Clock = _project.Clock with { Mode = Enum.Parse<ClockMode>((string)_clockMode.SelectedItem!), Rate = rate, OffsetFrames = offset.ToFrameNumber(),
-                MidiInput = _midiInput.SelectedIndex <= 0 ? null : (string)_midiInput.SelectedItem!, MidiOutput = _midiOutput.SelectedIndex <= 0 ? null : (string)_midiOutput.SelectedItem!,
-                OutputEnabled = _mtcEnabled.Checked, SendLocateDuringScrub = _scrubMtc.Checked, OutputOffsetMilliseconds = (int)_mtcOffset.Value },
-            Audio = _project.Audio with { DeviceId = _audioDevice.SelectedIndex <= 0 ? null : _audioDevices[_audioDevice.SelectedIndex - 1].Id,
-                LocalVolume = (float)_localVolume.Value / 100, StreamVolume = (float)_streamVolume.Value / 100, LocalMute = _localMute.Checked,
-                StreamMute = _streamMute.Checked, OffsetMilliseconds = (int)_audioOffset.Value },
-            ArtNet = _project.ArtNet with { Enabled = _artnetEnabled.Checked, BindAddress = _artnetBind.Text, Port = (int)_artnetPort.Value,
-                FirstUniverse = (int)_firstUniverse.Value, UniverseCount = (int)_universeCount.Value, AutomaticUniverseCount = _autoUniverses.Checked }
-        });
-    }
-    private async Task ApplyOutput() => await Edit("Change output", _project with { Width = (int)_outputW.Value, Height = (int)_outputH.Value,
-        GpuAdapter = _gpuChoice.SelectedIndex <= 0 ? null : (string)_gpuChoice.SelectedItem!,
-        FpsNumerator = (int)_outputFps.Value, FpsDenominator = (int)_outputDen.Value,
-        Spout = _project.Spout with { OutputEnabled = _spoutOutputEnabled.Checked, OutputName = _spoutName.Text },
-        Stream = _project.Stream with { BindAddress = _serverBind.Text, Port = (int)_serverPort.Value, VideoBitrateKbps = (int)_bitrate.Value } });
     private async Task SaveFrame()
     {
-        using var dialog = new SaveFileDialog { Filter = "PNG image|*.png", FileName = "StageFlow-frame.png" };
+        using var dialog = new SaveFileDialog { Filter = "PNG image|*.png", FileName = "StageFlow-v2-frame.png" };
         if (dialog.ShowDialog(this) == DialogResult.OK) await Guard(() => _engine!.SaveFrameAsync(dialog.FileName));
     }
     private async Task AddSpout()
     {
-        var senders = SpoutRegistry.Senders();
-        string? name = Prompt("Spout sender name", senders.FirstOrDefault() ?? "HNode Output");
+        string? name = Prompt("Spout sender name", SpoutRegistry.Senders().FirstOrDefault() ?? "HNode Output");
         if (string.IsNullOrWhiteSpace(name)) return;
         var layer = new Layer { Name = name, Kind = LayerKind.Spout, SpoutSender = name, Width = _project.Width, Height = _project.Height };
-        _selected = layer.Id; await Edit("Add Spout input", _project with { Layers = [.. _project.Layers, layer] });
+        _selected = layer.Id; await Edit("Add Spout input", WorkingProject with { Layers = [.. WorkingProject.Layers, layer] });
+    }
+    private async Task AddNetworkSource(NetworkSourceProtocol protocol)
+    {
+        string? source = PickNetworkSource(protocol);
+        if (string.IsNullOrWhiteSpace(source)) return;
+        var layer = new Layer { Name = protocol + " source", Kind = LayerKind.Network, NetworkProtocol = protocol, NetworkSource = source, Width = _project.Width, Height = _project.Height };
+        _selected = layer.Id; await Edit("Add network source", WorkingProject with { Layers = [.. WorkingProject.Layers, layer] }); Inspect("Selection");
+    }
+    private string? PickNetworkSource(NetworkSourceProtocol protocol)
+    {
+        using var dialog = new Form { Text = "Add " + protocol + " source", Size = new Size(650, 260), MinimumSize = new Size(530, 260), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 1, RowCount = 3 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var hint = Theme.Label(protocol == NetworkSourceProtocol.Srt ? "Enter an SRT URL, including caller/listener mode and latency." : "Select a discovered sender or enter its complete source name.", true);
+        var source = new ThemedComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDown, FlatStyle = FlatStyle.Flat };
+        if (protocol == NetworkSourceProtocol.Srt) source.Text = "srt://0.0.0.0:9002?mode=listener&latency=120000";
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill };
+        var add = Theme.Button("Add source", primary: true); add.DialogResult = DialogResult.OK; actions.Controls.Add(add); dialog.AcceptButton = add;
+        if (protocol != NetworkSourceProtocol.Srt)
+        {
+            var refresh = Theme.Button("Refresh sources"); actions.Controls.Add(refresh);
+            async Task Discover()
+            {
+                refresh.Enabled = false; hint.Text = "Looking for " + protocol + " senders…";
+                try
+                {
+                    string[] names = await Task.Run(() => protocol == NetworkSourceProtocol.Ndi ? StageFlow.Engine.Network.NdiNative.Sources() : StageFlow.Engine.Network.OmtNative.Sources());
+                    if (dialog.IsDisposed) return;
+                    string typed = source.Text; source.Items.Clear(); source.Items.AddRange(names); source.Text = typed;
+                    if (typed.Length == 0 && names.Length > 0) source.SelectedIndex = 0;
+                    hint.Text = names.Length + " sources found. You can also enter a complete source name.";
+                }
+                catch (Exception ex) { if (!dialog.IsDisposed) hint.Text = ex.Message; }
+                finally { if (!refresh.IsDisposed) refresh.Enabled = true; }
+            }
+            refresh.Click += async (_, _) => await Discover(); dialog.Shown += async (_, _) => await Discover();
+        }
+        layout.Controls.Add(hint, 0, 0); layout.Controls.Add(source, 0, 1); layout.Controls.Add(actions, 0, 2); dialog.Controls.Add(layout); Theme.Apply(dialog, _preferences.TextSize);
+        return dialog.ShowDialog(this) == DialogResult.OK ? source.Text.Trim() : null;
+    }
+    private void ShowNetworkOutputs()
+    {
+        using var dialog = new Form { Text = "StageFlow v2 · Network destinations", Size = new Size(830, 550), StartPosition = FormStartPosition.CenterParent, BackColor = Theme.Background };
+        var list = new ListBox { Dock = DockStyle.Left, Width = 230, BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, DisplayMember = "Name" };
+        var properties = CreatePropertyGrid(); var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 52 };
+        void RefreshList(Guid? select = null)
+        {
+            list.Items.Clear(); foreach (var output in WorkingProject.NetworkOutputs) list.Items.Add(output);
+            for (int i = 0; i < list.Items.Count; i++) if (((NetworkStreamOutput)list.Items[i]).Id == select) list.SelectedIndex = i;
+        }
+        foreach (var protocol in Enum.GetValues<NetworkStreamProtocol>()) buttons.Controls.Add(Theme.Button("+ " + protocol, (_, _) =>
+        {
+            var output = new NetworkStreamOutput { Name = protocol + " " + (WorkingProject.NetworkOutputs.Count + 1), Protocol = protocol,
+                Url = protocol == NetworkStreamProtocol.Rtmp ? "rtmp://127.0.0.1/live/stageflow" : "srt://127.0.0.1:9001?mode=caller&latency=120000" };
+            QueueLive("Add destination", WorkingProject with { NetworkOutputs = [.. WorkingProject.NetworkOutputs, output] }); RefreshList(output.Id);
+        }));
+        buttons.Controls.Add(Theme.Button("Remove", (_, _) =>
+        {
+            if (list.SelectedItem is NetworkStreamOutput output) { QueueLive("Remove destination", WorkingProject with { NetworkOutputs = WorkingProject.NetworkOutputs.Where(o => o.Id != output.Id).ToList() }); properties.SelectedObject = null; RefreshList(); }
+        }));
+        list.SelectedIndexChanged += (_, _) =>
+        {
+            if (list.SelectedItem is not NetworkStreamOutput output) return;
+            var bag = new LiveProperties(output.Name);
+            AddRecord(bag, "Destination", () => WorkingProject.NetworkOutputs.First(o => o.Id == output.Id), (p, value) =>
+                QueueLive("Edit destination", p with { NetworkOutputs = p.NetworkOutputs.Select(o => o.Id == output.Id ? value : o).ToList() }), ["Id"]);
+            properties.SelectedObject = bag;
+        };
+        dialog.Controls.Add(properties); dialog.Controls.Add(list); dialog.Controls.Add(buttons); RefreshList(); dialog.ShowDialog(this);
     }
 }

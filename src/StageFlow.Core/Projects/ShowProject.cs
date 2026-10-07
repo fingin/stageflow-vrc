@@ -5,7 +5,7 @@ namespace StageFlow.Core.Projects;
 
 public sealed record ShowProject
 {
-    public const int CurrentSchema = 1;
+    public const int CurrentSchema = 2;
     public int SchemaVersion { get; init; } = CurrentSchema;
     public string Name { get; init; } = "Untitled show";
     public string? MediaPath { get; init; }
@@ -20,6 +20,9 @@ public sealed record ShowProject
     public StreamSettings Stream { get; init; } = new();
     public MidiDmxSettings MidiDmx { get; init; } = new();
     public SpoutSettings Spout { get; init; } = new();
+    public StageFlow.Core.Osc.OscSettings Osc { get; init; } = new();
+    public List<NetworkStreamOutput> NetworkOutputs { get; init; } = [];
+    public LanVideoSettings LanVideo { get; init; } = new();
     public List<Layer> Layers { get; init; } = [];
     public List<Marker> Markers { get; init; } = [];
     public long LoopInTicks { get; init; }
@@ -29,10 +32,17 @@ public sealed record ShowProject
 
     public void Validate()
     {
-        if (Clock == null || Audio == null || ArtNet == null || Stream == null || MidiDmx == null || Spout == null || Layers == null || Markers == null)
+        if (Clock == null || Audio == null || ArtNet == null || Stream == null || MidiDmx == null || Spout == null || Osc == null || Layers == null || Markers == null)
             throw new InvalidDataException("Project is missing required settings.");
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 256) throw new InvalidDataException("Show name requires 1–256 characters.");
         if (SchemaVersion != CurrentSchema) throw new InvalidDataException($"Unsupported project schema {SchemaVersion}.");
+        Osc.Validate();
+        if (NetworkOutputs == null || NetworkOutputs.Count > 16 || LanVideo == null) throw new InvalidDataException("Invalid network outputs.");
+        foreach (var output in NetworkOutputs) { if (output == null) throw new InvalidDataException("Missing output."); output.Validate(); }
+        if (NetworkOutputs.Select(o => o.Id).Distinct().Count() != NetworkOutputs.Count) throw new InvalidDataException("Duplicate output IDs.");
+        LanVideo.Validate();
+        if (NetworkOutputs.Any(o => o.Enabled && o.Protocol == NetworkStreamProtocol.Rtmp) && Stream.Encoder == "hevc_nvenc")
+            throw new InvalidDataException("RTMP output uses H.264. Select h264_nvenc or libx264.");
         if (Width is < 16 or > 8192 || Height is < 16 or > 8192 || (Width & 1) != 0 || (Height & 1) != 0)
             throw new InvalidDataException("Canvas must have even dimensions between 16 and 8192.");
         if (FpsNumerator is < 1 or > 120000 || FpsDenominator is < 1 or > 1001 ||
@@ -44,7 +54,7 @@ public sealed record ShowProject
             throw new InvalidDataException("Invalid Art-Net universe range.");
         if (Stream.Port is < 1 or > 65535 || Stream.VideoBitrateKbps is < 500 or > 200000 || Stream.AudioBitrateKbps is < 32 or > 512 ||
             !double.IsFinite(Stream.SegmentSeconds) || Stream.SegmentSeconds is < 0.5 or > 10 || Stream.PlaylistSegments is < 3 or > 20 ||
-            !System.Net.IPAddress.TryParse(Stream.BindAddress, out _) || Stream.Encoder != "h264_nvenc") throw new InvalidDataException("Invalid streaming settings. This build uses NVIDIA H.264 hardware encoding.");
+            !System.Net.IPAddress.TryParse(Stream.BindAddress, out _) || Stream.Encoder is not ("h264_nvenc" or "hevc_nvenc" or "libx264")) throw new InvalidDataException("Invalid streaming settings or unsupported encoder.");
         if (!float.IsFinite(Audio.LocalVolume) || !float.IsFinite(Audio.StreamVolume) || Audio.LocalVolume is < 0 or > 2 || Audio.StreamVolume is < 0 or > 2 ||
             Audio.OffsetMilliseconds is < -5000 or > 5000 || Clock.OutputOffsetMilliseconds is < -5000 or > 5000 || Math.Abs((double)Clock.OffsetFrames) > 2592000)
             throw new InvalidDataException("Invalid audio gain or timing offset.");
@@ -72,6 +82,11 @@ public sealed record ShowProject
             if (layer.Kind == LayerKind.Grid && layer.Grid == null) throw new InvalidDataException("Grid layer requires a layout.");
             if (layer.Kind == LayerKind.Spout && (string.IsNullOrWhiteSpace(layer.SpoutSender) || layer.SpoutSender.Length > 255 || layer.SpoutSender.Contains('\\')))
                 throw new InvalidDataException("Select a valid Spout sender.");
+            if (!Enum.IsDefined(layer.NetworkProtocol) || !float.IsFinite(layer.LiveAudioVolume) || layer.LiveAudioVolume is < 0 or > 2 ||
+                layer.Kind == LayerKind.Network && (string.IsNullOrWhiteSpace(layer.NetworkSource) || layer.NetworkSource.Length > 4096))
+                throw new InvalidDataException("Network layers require a source name or URL.");
+            if (layer.Kind == LayerKind.Network && layer.NetworkProtocol == NetworkSourceProtocol.Srt && (!Uri.TryCreate(layer.NetworkSource, UriKind.Absolute, out var source) || source.Scheme != "srt"))
+                throw new InvalidDataException("SRT inputs require an srt:// URL.");
             layer.Grid?.Validate();
         }
         foreach (var marker in Markers)
@@ -127,6 +142,7 @@ public sealed record SpoutSettings
 }
 public sealed record StreamSettings
 {
+    public bool HlsEnabled { get; init; } = true;
     public string BindAddress { get; init; } = "0.0.0.0";
     public int Port { get; init; } = 8888;
     public string Encoder { get; init; } = "h264_nvenc";
@@ -135,7 +151,8 @@ public sealed record StreamSettings
     public double SegmentSeconds { get; init; } = 1;
     public int PlaylistSegments { get; init; } = 6;
 }
-public enum LayerKind { Video, Grid, Timecode, Spout }
+public enum LayerKind { Video, Grid, Timecode, Spout, Network }
+public enum NetworkSourceProtocol { Ndi, Omt, Srt }
 public sealed record Layer
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -158,6 +175,10 @@ public sealed record Layer
     public string BackgroundColor { get; init; } = "#AA000000";
     public string Label { get; init; } = "";
     public string? SpoutSender { get; init; }
+    public NetworkSourceProtocol NetworkProtocol { get; init; }
+    public string? NetworkSource { get; init; }
+    public bool LiveAudioEnabled { get; init; }
+    public float LiveAudioVolume { get; init; } = 1;
     public GridLayout? Grid { get; init; }
 }
 public sealed record Marker

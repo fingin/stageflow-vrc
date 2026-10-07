@@ -4,8 +4,10 @@
     <OutputType>WinExe</OutputType><UseWindowsForms>true</UseWindowsForms>
     <PlatformTarget>x64</PlatformTarget><ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets/stageflow.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Assets/stageflow.ico" />
     <InternalsVisibleTo Include="StageFlow.UiTests" />
     <ProjectReference Include="../StageFlow.Engine/StageFlow.Engine.csproj" />
     <Content Include="../../web/**" Link="web/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

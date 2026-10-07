@@ -1,7 +1,8 @@
-# StageFlow delivery contract
+# StageFlow v2 delivery contract
 
-Status: runnable alpha.4 delivered for user stress testing. Final performance and
-external show validation remain open; this is not a completion claim for the goal.
+Status: independent v2 alpha.2 portable, with the modern workspace, live settings,
+network protocols and OSC implemented. V1 is frozen. External show certification
+and long-duration validation remain open; see VALIDATION.md and V2-REVIEW.md.
 
 ## User workflows
 
@@ -25,7 +26,7 @@ external show validation remain open; this is not a completion claim for the goa
 ## Engineering constraints
 
 - One Windows x64 application process; native libraries are permitted.
-- Native GPU work through Direct3D 11, hardware decoder and hardware encoder.
+- Native GPU work through Direct3D 11 and hardware decode; NVENC default, optional CPU H.264.
 - UI never schedules video frames or MTC messages.
 - Bounded queues; no unbounded video buffering or per-frame bitmap capture.
 - Independent show time and monotonically increasing streaming timestamps.
@@ -45,12 +46,14 @@ external show validation remain open; this is not a completion claim for the goa
 - [x] Optional Spout texture I/O.
 - [x] Desktop transport/layer/project workflows and diagnostic recording.
 - [x] End-to-end media checks and self-contained portable package.
-- [ ] User GUI stress review and optimization of the full dynamic workload.
+- [x] Short v2 full-load dynamic benchmark passed; UI/settings regression checks passed.
+- [x] Searchable live preferences, skins, window layout, RTMP/SRT, NDI/OMT and OSC.
+- [ ] Extended user GUI stress review and long-duration soak.
 - [ ] Actual grandMA2, MIDI-DMX target world and physical audio validation.
 
 ArtPoll advertisement, multi-controller DMX merging and unused Hnode transcoding/
 generator modes are outside this alpha's implemented compatibility scope. See
-COMPATIBILITY.md. Latest stress evidence and unfinished performance gate are in
+COMPATIBILITY.md. Latest stress evidence and measured limits are in
 VALIDATION.md. Diagnostic sessions can be summarized with scripts/analyze-performance.ps1.
 
 ## Current environment

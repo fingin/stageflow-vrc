@@ -11,6 +11,7 @@ using StageFlow.Engine.Media;
 using StageFlow.Engine.Midi;
 using StageFlow.Engine.Streaming;
 using StageFlow.Engine.Spout;
+using StageFlow.Engine.Network;
 using Vortice.Mathematics;
 
 namespace StageFlow.Engine;
@@ -18,7 +19,7 @@ namespace StageFlow.Engine;
 public sealed record EngineStatus(string Gpu, double RenderMilliseconds, long RenderedFrames, long MissedDeadlines,
     bool Streaming, string? StreamUrl, long ArtNetPackets, long AudioUnderruns, string? Error, string? MediaError,
     string MidiDmx = "Off", string? SpoutOutput = null, string? SpoutStatus = null, double MeanRenderMilliseconds = 0, double PeakRenderMilliseconds = 0,
-    string? PhaseMilliseconds = null);
+    string? PhaseMilliseconds = null, string? NetworkStatus = null);
 public sealed record SlowFrame(DateTime Utc, double Milliseconds, int MissedBefore, double[] PhaseMilliseconds, int Gc0, int Gc1, int Gc2);
 
 /// <summary>Owns native resource lifetime and presentation. GUI communicates through commands and immutable projects.</summary>
@@ -55,6 +56,8 @@ public sealed class ShowEngine : IDisposable
     private MidiDmxOutput? _midiDmx;
     private SpoutSender? _spoutOut;
     private readonly Dictionary<Guid, SpoutReceiver> _spoutInputs = [];
+    private LanVideoOutput? _lanOutput;
+    private readonly Dictionary<Guid, NetworkVideoInput> _networkInputs = [];
     private HlsServer? _server;
     private HardwareStreamEncoder? _encoder;
     private HlsSegmentStore? _segments;
@@ -133,6 +136,9 @@ public sealed class ShowEngine : IDisposable
     public Task ReconnectRoutesAsync() => Command(() =>
     {
         _error = null; ConfigureMidi();
+        foreach (var input in _networkInputs.Values) input.Dispose(); _networkInputs.Clear();
+        foreach (var layer in _project.Layers.Where(l => l.Kind == LayerKind.Network))
+            _networkInputs[layer.Id] = new(_gpu!, layer.NetworkProtocol, layer.NetworkSource!);
         _artnet?.DisposeAsync().AsTask().GetAwaiter().GetResult(); _artnet = null;
         _artNetError = null;
         if (_project.ArtNet.Enabled)
@@ -152,12 +158,13 @@ public sealed class ShowEngine : IDisposable
         if (_encoder != null) return;
         var settings = _project.Stream;
         var store = new HlsSegmentStore(settings.PlaylistSegments, targetSeconds: settings.SegmentSeconds);
-        var encoder = new HardwareStreamEncoder(_gpu!, store, _project.Width, _project.Height, _project.FpsNumerator, _project.FpsDenominator, settings);
+        if (!settings.HlsEnabled && !_project.NetworkOutputs.Any(o => o.Enabled)) throw new InvalidOperationException("Enable HLS or a network stream destination first.");
+        var encoder = new HardwareStreamEncoder(_gpu!, store, _project.Width, _project.Height, _project.FpsNumerator, _project.FpsDenominator, settings, _project.NetworkOutputs);
         var server = new HlsServer();
-        try { server.StartAsync(store, IPAddress.Parse(settings.BindAddress), settings.Port, _webAssets).GetAwaiter().GetResult(); }
+        try { if (settings.HlsEnabled) server.StartAsync(store, IPAddress.Parse(settings.BindAddress), settings.Port, _webAssets).GetAwaiter().GetResult(); }
         catch { encoder.Dispose(); server.DisposeAsync().AsTask().GetAwaiter().GetResult(); throw; }
         _segments = store; _encoder = encoder; _server = server; _streamStartTick = -1;
-        _streamUrl = $"http://127.0.0.1:{settings.Port}/live/index.m3u8"; _error = null;
+        _streamUrl = settings.HlsEnabled ? $"http://127.0.0.1:{settings.Port}/live/index.m3u8" : null; _error = null;
     });
     public Task StopStreamAsync() => Command(StopStreaming);
     public Task SaveFrameAsync(string path) => Command(() => FrameCapture.SavePng(_gpu!, _canvas!, path));
@@ -189,7 +196,7 @@ public sealed class ShowEngine : IDisposable
     {
         var old = _project;
         bool canvasChanged = _canvas == null || old.Width != project.Width || old.Height != project.Height;
-        if (_encoder != null && (canvasChanged || old.FpsNumerator != project.FpsNumerator || old.FpsDenominator != project.FpsDenominator || old.Stream != project.Stream))
+        if (_encoder != null && (canvasChanged || old.FpsNumerator != project.FpsNumerator || old.FpsDenominator != project.FpsDenominator || old.Stream != project.Stream || !old.NetworkOutputs.SequenceEqual(project.NetworkOutputs)))
             throw new InvalidOperationException("Stop the stream before changing output resolution, frame rate or encoder settings.");
         _project = project;
         SelectLayer(_selection?.Id);
@@ -232,12 +239,26 @@ public sealed class ShowEngine : IDisposable
             _spoutOut?.Dispose(); _spoutOut = null;
             if (project.Spout.OutputEnabled) _spoutOut = new(_gpu!, project.Spout.OutputName, project.Width, project.Height);
         }
+        if (old.LanVideo != project.LanVideo || canvasChanged || old.FpsNumerator != project.FpsNumerator || old.FpsDenominator != project.FpsDenominator)
+        {
+            _lanOutput?.Dispose(); _lanOutput = null;
+            if (project.LanVideo.NdiEnabled || project.LanVideo.OmtEnabled)
+                _lanOutput = new(_gpu!, _canvas!, project.FpsNumerator, project.FpsDenominator, project.LanVideo);
+        }
         foreach (var id in _spoutInputs.Keys.ToArray())
         {
             var layer = project.Layers.FirstOrDefault(l => l.Id == id);
             if (layer?.Kind != LayerKind.Spout || layer.SpoutSender != _spoutInputs[id].Sender)
             { _spoutInputs[id].Dispose(); _spoutInputs.Remove(id); }
         }
+        foreach (var id in _networkInputs.Keys.ToArray())
+        {
+            var layer = project.Layers.FirstOrDefault(l => l.Id == id);
+            if (layer?.Kind != LayerKind.Network || layer.NetworkSource != _networkInputs[id].Source || layer.NetworkProtocol != _networkInputs[id].Protocol)
+            { _networkInputs[id].Dispose(); _networkInputs.Remove(id); }
+        }
+        foreach (var layer in project.Layers.Where(l => l.Kind == LayerKind.Network))
+            if (!_networkInputs.ContainsKey(layer.Id)) _networkInputs[layer.Id] = new(_gpu!, layer.NetworkProtocol, layer.NetworkSource!);
         var ids = project.Layers.Where(l => l.Kind == LayerKind.Grid).Select(l => l.Id).ToHashSet();
         foreach (var id in _grids.Keys.Where(k => !ids.Contains(k)).ToArray())
         { var item = _grids[id]; item.Renderer.Dispose(); item.Surface.Dispose(); _grids.Remove(id); }
@@ -274,6 +295,7 @@ public sealed class ShowEngine : IDisposable
         try
         {
             FFmpegRuntime.Initialize(_runtime);
+            ProtocolRuntime.Initialize(_runtime);
             var preferred = GpuDevice.EnumerateAdapters().FirstOrDefault(g => g.Name == _project.GpuAdapter);
             _gpu = new GpuDevice(preferred?.Index); _compositor = new(_gpu); _glyphs = new(_gpu); _converter = new(_gpu);
             _preview = new(_gpu, _window, Math.Max(1, _previewWidth), Math.Max(1, _previewHeight));
@@ -307,7 +329,8 @@ public sealed class ShowEngine : IDisposable
                     Volatile.Write(ref _status, new(_gpu.Adapter.Name, ms, _frames, _missed, _encoder != null, _streamUrl,
                         _dmx?.Accepted ?? 0, _media?.AudioUnderruns ?? 0, _error ?? _artNetError ?? _localAudioError ?? _mtcOut?.Error ?? _mtcIn?.Error ?? _midiDmx?.Error ?? _artnet?.LastError ?? _localAudio?.Error, _media?.Error,
                         _midiDmx?.Status ?? "Off", _spoutOut?.Name, _spoutInputs.Values.Select(s => s.Error).FirstOrDefault(s => s != null), _renderTotal / _frames, _renderPeak,
-                        string.Join(", ", _phaseTotal.Select((sum, i) => $"{new[] { "video", "layers", "spout", "audio", "encode", "preview" }[i]}={sum / _frames:0.000}")) + " encoder(pool/copy/send/drain/audio)=" + _encoder?.TimingSummary));
+                        string.Join(", ", _phaseTotal.Select((sum, i) => $"{new[] { "video", "layers", "spout", "audio", "encode", "preview" }[i]}={sum / _frames:0.000}")) + " encoder(pool/copy/send/drain/audio)=" + _encoder?.TimingSummary,
+                        _encoder?.NetworkStatus + " " + _lanOutput?.Status + "\n" + string.Join("\n", _networkInputs.Values.Select(input => $"{input.Protocol} in: {input.Frames} frames · {input.Error ?? (input.Frames > 0 ? "receiving" : "waiting for source")}"))));
             }
         }
         catch (Exception ex) { _error = ex.ToString(); _ready.TrySetException(ex); Volatile.Write(ref _status, _status with { Error = _error }); }
@@ -321,6 +344,8 @@ public sealed class ShowEngine : IDisposable
             try { StopStreaming(); } catch { }
             _media?.Dispose(); _mtcIn?.Dispose(); _mtcOut?.Dispose(); _midiDmx?.Dispose(); _localAudio?.Dispose();
             _spoutOut?.Dispose(); foreach (var input in _spoutInputs.Values) input.Dispose();
+            _lanOutput?.Dispose();
+            foreach (var input in _networkInputs.Values) input.Dispose();
             _artnet?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             foreach (var grid in _grids.Values) { grid.Renderer.Dispose(); grid.Surface.Dispose(); }
             _preview?.Dispose(); _converter?.Dispose(); _glyphs?.Dispose(); _compositor?.Dispose(); _canvas?.Dispose(); _gpu?.Dispose();
@@ -383,6 +408,12 @@ public sealed class ShowEngine : IDisposable
                     if (uv.Z > 0 && uv.W > 0) _compositor!.Draw(_canvas, view, rect, uv, (float)layer.Opacity, point: true);
                 }
             }
+            else if (layer.Kind == LayerKind.Network && _networkInputs.TryGetValue(layer.Id, out var input) && input.GetFrame() is { } live)
+            {
+                var uv = new Vector4((float)layer.CropLeft / live.Width, (float)layer.CropTop / live.Height,
+                    1f - (float)(layer.CropLeft + layer.CropRight) / live.Width, 1f - (float)(layer.CropTop + layer.CropBottom) / live.Height);
+                if (uv.Z > 0 && uv.W > 0) _compositor!.Draw(_canvas, live.View, rect, uv, (float)layer.Opacity);
+            }
         }
         RecordPhase(1, ref phase);
         _spoutOut?.Send(_canvas);
@@ -416,7 +447,10 @@ public sealed class ShowEngine : IDisposable
                 (_audioCursor - snapshot.LoopIn.TotalSeconds * 48000) % ((snapshot.LoopOut - snapshot.LoopIn).TotalSeconds * 48000);
             _audioWrapped = true;
         }
+        foreach (var layer in _project.Layers)
+            if (layer.Kind == LayerKind.Network && _networkInputs.TryGetValue(layer.Id, out var input)) input.MixAudio(pcm, layer.LiveAudioEnabled ? layer.LiveAudioVolume : 0);
         _localAudio?.Write(pcm[^Math.Min(pcm.Length, nominalAudioFrames * 2)..]);
+        _lanOutput?.Submit(_canvas, _outputTick, pcm, _project.Audio.StreamMute ? 0 : _project.Audio.StreamVolume);
         RecordPhase(3, ref phase);
         if (_encoder != null)
         {

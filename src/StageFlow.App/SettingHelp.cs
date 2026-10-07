@@ -1,0 +1,53 @@
+using StageFlow.Core.Projects;
+namespace StageFlow.App;
+internal static class SettingHelp
+{
+    public static string Describe(Type type, string name) => name switch
+    {
+        "Width" or "Height" => type == typeof(ShowProject) ? "Output canvas size in pixels. Use even dimensions from 16 to 8192. This is independent of window size." : "Layer size in canvas pixels.",
+        "X" or "Y" => "Position in output canvas pixels. Drag in the preview or enter an exact value.",
+        "Opacity" => "Layer opacity from 0 (hidden) to 1 (fully visible). Keep data grids at 1.",
+        "GpuAdapter" => "Direct3D device used for playback and compositing. Changing it restarts playback and disarms MIDI outputs.",
+        "FpsNumerator" => "Output frame-rate numerator. Use 60000 with denominator 1001 for 59.94 fps, or 60 with denominator 1 for 60 fps.",
+        "FpsDenominator" => "Output frame-rate denominator. This does not change the MTC frame rate.",
+        "Encoder" => "h264_nvenc: NVIDIA H.264 hardware. hevc_nvenc: NVIDIA HEVC hardware. libx264: CPU H.264. RTMP requires H.264; browser HEVC support varies.",
+        "VideoBitrateKbps" => "Video bitrate in kilobits per second (500–200000). Applies to HLS, RTMP and SRT. Low bitrates can corrupt grid data.",
+        "AudioBitrateKbps" => "AAC audio bitrate in kilobits per second (32–512). Encoded output is 48 kHz stereo.",
+        "SegmentSeconds" => "HLS segment duration in seconds (0.5–10). Also controls the encoded stream keyframe interval.",
+        "PlaylistSegments" => "Number of recent HLS segments retained in memory (3–20). Longer retention uses more memory.",
+        "HlsEnabled" => "Serve HLS from this application when Start stream is enabled. RTMP/SRT destinations can run with HLS disabled.",
+        "BindAddress" => "Local interface IP address. 127.0.0.1 accepts this computer only; 0.0.0.0 listens on all IPv4 interfaces.",
+        "Port" => "Local listening port, from 1 to 65535. Another process cannot use the same address and port.",
+        "LocalVolume" => "Local monitoring gain: 0 is silent, 1 is unity, 2 is +6 dB. Does not change stream volume.",
+        "StreamVolume" => "Program audio gain for HLS, RTMP, SRT, NDI and OMT: 0 to 2, with 1 as unity.",
+        "LocalMute" => "Mute the selected local audio device while keeping program stream audio independent.",
+        "StreamMute" => "Mute program stream audio while keeping local monitoring independent.",
+        "OffsetMilliseconds" => "Movie audio timing offset (−5000 to +5000 ms). Positive values advance the audio.",
+        "OutputOffsetMilliseconds" => "MTC output timing offset (−5000 to +5000 ms). Positive values advance the timecode.",
+        "OffsetFrames" => "Timecode start offset in MTC frames. The timeline, all clock overlays and outgoing MTC use this offset.",
+        "Mode" when type == typeof(ClockSettings) => "Internal: the timeline is master. IncomingMtc: follow a selected MIDI input; local transport is disabled.",
+        "Rate" => "MTC rate: 24, 25, 29.97 drop-frame or 30 fps. This is independent of video output fps.",
+        "MidiInput" => "MIDI input used in IncomingMtc clock mode.",
+        "MidiOutput" => "MIDI output to grandMA2. Existing Windows MIDI ports, including loopMIDI, are selectable.",
+        "OutputEnabled" when type == typeof(ClockSettings) => "Enable master MTC on the selected port. Also arm MIDI outputs in the main window.",
+        "SendLocateDuringScrub" => "Send MTC locate messages while dragging the timeline. Disable to keep outgoing MTC quiet during scrubbing.",
+        "FirstUniverse" => "First Art-Net universe address, zero-based. Art-Net range is 0–32767.",
+        "UniverseCount" => "Maximum received universes (1–512). The selected grid layout must have capacity for the channels you use.",
+        "AutomaticUniverseCount" => "Serialize only the received channel extent, bounded by the configured universe count and grid capacity.",
+        "ChannelsPerUpdate" => "MIDI-DMX scheduler budget per update (3–1000). Higher values increase MIDI traffic.",
+        "IdleScanChannels" => "Unchanged MIDI-DMX channels refreshed per update (0–1000).",
+        "OutputDevice" => "MIDI-DMX output for gridnode. Use a different port from grandMA2 timecode.",
+        "UseEditorLog" => "Watch the Unity Editor log for the MIDI-DMX readiness handshake instead of the VRChat client log.",
+        "LogPath" => "Optional explicit log path. Leave empty to discover the normal VRChat or Unity Editor log.",
+        "OutputName" or "NdiName" or "OmtName" => "Name advertised to receivers. Use a unique name for this program output.",
+        "NdiEnabled" or "OmtEnabled" => "Send the composited program plus stereo audio on the LAN. This output is independent of the Start stream button.",
+        "NetworkSource" => "Complete NDI/OMT source name, or an SRT URL with mode and latency options.",
+        "LiveAudioEnabled" => "Mix this live source's audio into both local monitoring and program audio. Off by default to avoid feedback.",
+        "LiveAudioVolume" => "Live input gain from 0 to 2. Program and local output gains are applied afterward.",
+        "Url" => "RTMP endpoint including stream key, or SRT URL. Example: srt://host:9001?mode=caller&latency=120000. SRT latency is in microseconds.",
+        "FontSize" => "Clock font size, 8–256. All clocks follow the same master timecode.",
+        "TextColor" or "BackgroundColor" => "Hex color: #RRGGBB or #AARRGGBB. Alpha 00 is transparent and FF is opaque.",
+        "Label" => "Optional caption displayed with this clock.",
+        _ => "Changes take effect automatically. Press Enter or leave a text field to finish editing."
+    };
+}

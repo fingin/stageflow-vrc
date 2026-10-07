@@ -8,7 +8,7 @@ internal static class CrashReporter
 {
     internal static string? Write(Exception exception, string context) => Write(exception, context,
         [Path.Combine(AppContext.BaseDirectory, "diagnostics"),
-         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StageFlow", "diagnostics")]);
+         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StageFlowV2", "diagnostics")]);
 
     internal static string? Write(Exception exception, string context, IEnumerable<string> folders)
     {

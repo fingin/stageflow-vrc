@@ -8,6 +8,9 @@ using StageFlow.Engine.Streaming;
 using StageFlow.Core.Projects;
 
 string nativeDirectory = Environment.GetEnvironmentVariable("STAGEFLOW_NATIVE") ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../runtime"));
+if (args.Length == 1 && args[0] == "--protocols") { ProtocolChecks.Run(nativeDirectory); return; }
+if (args.Length == 2 && args[0] == "--network") { ProtocolChecks.Network(nativeDirectory, args[1]); return; }
+if (args.Length == 1 && args[0] == "--srt-loopback") { ProtocolChecks.SrtLoopback(nativeDirectory); return; }
 
 if (args.Length == 1 && args[0] == "--runtime-info")
 {

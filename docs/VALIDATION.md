@@ -1,4 +1,57 @@
-# Validation log — alpha.4
+# Validation log — v2 alpha.2
+
+## Current v2 checks (2026-10-07 UTC)
+
+Release build has zero warnings/errors. Core checks: **24/24**. UI checks cover
+200 menu dismissals, the alpha.1 inspector property-owner crash, all 15 Preferences
+sections, global search, four live skins, consecutive settings edits, undo/redo,
+invalid-value rollback, save persistence, recovery and resize layout. Windows
+1100×720, 1920×1080, 1200×900 and 1500×780 keep the preview aspect; action layout on all three workspace tabs is
+also checked at 8, 9 and 13 pt. Small panes scroll instead of hiding the layer list.
+
+The following native checks passed after the v2 changes:
+
+- Spout discovery/share/cleanup, 22 GPU grid/orientation/mask cases (193,900 samples)
+  and 13,312 BinaryStageFlight reference cells.
+- H.264 NVENC, HEVC NVENC and libx264 each produced HLS video/audio packets.
+- Native NDI and OMT video/audio loopback, then production sender/input-to-GPU and
+  PCM mixing checks. The shared GPU staging check delivered 157 frames per sender,
+  with zero reported dropped frames or GPU skips in this short check.
+- Production SRT H.264/AAC output → input → GPU/audio loopback.
+- RTMP output received independently by a development-only FFmpeg listener;
+  ffprobe reports H.264 640×360 plus AAC 48 kHz stereo, 3.021 seconds. That listener
+  is a test fixture and is not shipped or required by StageFlow.
+
+### Full-load performance
+
+RTX 4080, supplied movie, imported Sample layout, 2560×1440/60, 45 continuously changing
+Art-Net universes, 12 timecode overlays, Spout output and encoded HLS/AAC. The run
+lasted 60.91 s with a 45.32 s measured window after warm-up:
+
+| Metric | Measured result |
+|---|---:|
+| Rendered frames | 2,718 |
+| Missed deadlines | 0 |
+| Audio underruns | 0 |
+| Mean / peak CPU render submission + wait | 2.19 / 13.70 ms |
+| Process CPU | 61.34% of one logical core |
+| Working set | 335.5 → 340.2 MB |
+| Engine / media errors | None |
+
+This is a short-run measurement on this machine, not a guarantee across GPUs,
+codecs, network receivers or long shows. It did not include simultaneous NDI/OMT
+or a browser viewer. Those routes have separate focused loopback checks. Native
+window capture timed out twice; regression renders from the app were inspected,
+but a complete manual/accessibility audit was not possible in this environment.
+
+Actual grandMA2 timing/chase, the target-world decoder, physical audio listening
+and long-duration soak remain external checks. See V2-REVIEW.md for review findings
+and known protocol limits. V1's earlier measurements below are historical and
+must not be read as current v2 performance.
+
+---
+
+# Historical v1 validation — alpha.4
 
 This document distinguishes implemented behavior from external show certification.
 Performance figures below are measured on this PC's RTX 4080, not universal claims.
@@ -67,7 +120,7 @@ the earlier stress numbers above must not be presented as post-change measuremen
 
 ## Recording a real workload
 
-Run `StageFlow.App.exe --record` or use **Status → Start performance recording**.
+Run `StageFlow.App.exe --record` or use **Monitor → Start performance recording**.
 The bottom bar displays **REC**. A JSONL file is written once per second in the
 portable app's `diagnostics` directory. It includes interval frame/Art-Net rates,
 missed deadlines, render phases for slow frames, CPU, working/private/managed

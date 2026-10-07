@@ -4,9 +4,52 @@ using StageFlow.Core.ArtNet;
 using StageFlow.Core.Grid;
 using StageFlow.Core.Projects;
 using StageFlow.Core.Timing;
+using StageFlow.Core.Osc;
 
 var tests = new (string Name, Action Body)[]
 {
+    ("OSC wire types, strict padding and malformed packets", () =>
+    {
+        byte[] packet = OscCodec.Encode("/project/record", 1, 0.5f, true, false, "value", 12L, 0.75d);
+        Check(OscCodec.TryDecode(packet, out var decoded)); Equal(1, decoded.Count);
+        Equal("/project/record", decoded[0].Address); Equal(1, (int)decoded[0].Arguments[0]!); Equal(0.5f, (float)decoded[0].Arguments[1]!);
+        Equal(true, (bool)decoded[0].Arguments[2]!); Equal(false, (bool)decoded[0].Arguments[3]!); Equal(12L, (long)decoded[0].Arguments[5]!);
+        for (int length = 0; length < packet.Length; length++) if (length != 16) Check(!OscCodec.TryDecode(packet.AsSpan(0, length), out _)); // Address-only legacy message is valid.
+        var random = new Random(741); for (int i = 0; i < 2000; i++) { byte[] noise = new byte[random.Next(0, 512)]; random.NextBytes(noise); OscCodec.TryDecode(noise, out _); }
+    }),
+    ("OSC nested bundle timestamps and element bounds", () =>
+    {
+        var message = OscCodec.Encode("/play", 1); byte[] bundle = new byte[20 + message.Length];
+        System.Text.Encoding.ASCII.GetBytes("#bundle\0").CopyTo(bundle, 0); bundle[15] = 1;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bundle.AsSpan(16), message.Length); message.CopyTo(bundle, 20);
+        Check(OscCodec.TryDecode(bundle, out var decoded)); Equal(1, decoded.Count); Check(decoded[0].Due == null);
+        bundle[19] = 255; Check(!OscCodec.TryDecode(bundle, out _));
+    }),
+    ("OSC mapping supports custom addresses, edges and value ranges", () =>
+    {
+        var router = new OscRouter(); router.Configure([new() { Address = "/project/record", Action = ControlAction.Play, Trigger = OscTrigger.RisingEdge },
+            new() { Address = "/fader", Action = ControlAction.SeekSeconds, Trigger = OscTrigger.Value, Minimum = 10, Maximum = 110 }]);
+        Equal(ControlAction.Play, router.Route(new("/project/record", [1]), "pilot").Single().Action);
+        Equal(0, router.Route(new("/project/record", [1]), "pilot").Count()); Equal(0, router.Route(new("/project/record", [0]), "pilot").Count());
+        Equal(1, router.Route(new("/project/record", [1]), "pilot").Count()); Equal(35d, router.Route(new("/fader", [0.25f]), "pilot").Single().Value);
+        Equal(0, router.Route(new("/fader", [float.NaN]), "pilot").Count());
+    }),
+    ("OSC UDP listener receives and cancels", () =>
+    {
+        using var reserve = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)); int port = ((IPEndPoint)reserve.Client.LocalEndPoint!).Port; reserve.Close();
+        using var listener = new OscListener("127.0.0.1", port); using var sender = new UdpClient();
+        var packet = OscCodec.Encode("/play", 1); sender.Send(packet, packet.Length, new IPEndPoint(IPAddress.Loopback, port));
+        OscReceived? message = null; Check(SpinWait.SpinUntil(() => listener.TryRead(out message), 3000)); Equal("/play", message!.Message.Address);
+    }),
+    ("v2 migrates v1 projects and validates protocol codec combinations", () =>
+    {
+        string path = Path.Combine(Path.GetTempPath(), "stageflow-v1-migration-" + Guid.NewGuid() + ".stageflow");
+        File.WriteAllText(path, "{\"schemaVersion\":1,\"name\":\"v1\"}");
+        var migrated = ProjectStore.Load(path); Equal(2, migrated.SchemaVersion); Check(File.ReadAllText(path).Contains("\"schemaVersion\":1"));
+        var project = new ShowProject { Stream = new() { Encoder = "hevc_nvenc" }, NetworkOutputs = [new() { Enabled = true }] };
+        bool rejected = false; try { project.Validate(); } catch (InvalidDataException) { rejected = true; } Check(rejected);
+        (project with { Stream = new() { Encoder = "libx264" } }).Validate();
+    }),
     ("grid masking hot path does not allocate per channel", () =>
     {
         var layout = new GridLayout { Masks = [new(10, 20)] };

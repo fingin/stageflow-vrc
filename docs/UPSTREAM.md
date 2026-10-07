@@ -52,3 +52,19 @@ build instructions with MSVC/MSYS2. Keep the pinned sources and supplied patches
 The StageFlow package script uses the verified prebuilt DLLs, not a local native
 compiler. Public redistribution should accompany the full corresponding source
 and notices for the chosen native dependency build, as well as StageFlow's source.
+
+## V2 network runtimes
+
+- Open Media Transport 1.0.0.19: https://github.com/openmediatransport/libomtnet
+  and https://github.com/openmediatransport/libomt. MIT notices and the matching
+  C ABI header are under licenses/omt. libvmx accompanies libomt.
+- NDI Runtime 6.3.2: official redistributable https://ndi.link/NDIRedistV6.
+  NDI is a registered trademark of Vizrt NDI AB. The unmodified runtime keeps its
+  proprietary license; agreement and third-party notices are under licenses/ndi.
+  NDI information is available from the application's Connections menu.
+- SRT, RTMP and RTMPS use the existing pinned FFmpeg/native dependencies.
+
+network-manifest.json records archive/DLL SHA-256 values. Source checkouts obtain
+NDI from the official runtime directory; the delivered private portable includes
+that runtime. Review the included agreements and corresponding-source obligations
+before public redistribution; this package does not change upstream license terms.

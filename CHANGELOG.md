@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0-alpha.2 — 2026-10-07
+
+- Independent v2 branch, schema migration and isolated preferences/recovery; v1 frozen.
+- Modern workspace, consistent menus/tabs, aspect-safe preview, responsive transport,
+  scrolling hierarchy, floating inspector, timeline markers and application icon.
+- Fifteen searchable Preferences sections, four skins, five accents, live text size,
+  remembered layout, preference import/export and clock color pickers.
+- Live property edits with validation, coalescing, undo/redo and pending-edit autosave.
+- Fix alpha.1 property-owner crash, menu lifetime, clipped controls, text undo capture,
+  async file/edit races, import settings loss and OSC reconnect handling.
+- RTMP/SRT outputs, H.264/HEVC NVENC and CPU H.264 encoder choices; shared AAC program.
+- NDI/OMT input/output and SRT input, optional live-source audio, source discovery,
+  reconnect status, bounded network queues and GPU staging.
+- OSC receiver, custom address/action mappings, learn, triggers, values and bundles.
+- Extend core/UI/protocol checks, review documentation, pinned network runtimes and
+  reproducible separate portable publishing.
+
+## 2.0.0-alpha.1 — internal preview
+
+- Initial v2 workspace and live inspector preview. Superseded by alpha.2.
+
+
 ## 0.1.0-alpha.4 — 2026-10-06
 
 - Fix the Show menu crash when clicking outside it: retain the menu until its

@@ -18,6 +18,10 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     private AVFrame* _videoFrame, _audioFrame;
     private AVPacket* _packet;
     private TsSegmentMuxer? _muxer;
+    private readonly List<NetworkPacketSink> _network = [];
+    private AVFrame* _softwareFrame;
+    private readonly bool _software;
+    public string NetworkStatus => string.Join(" · ", _network.Select(n => n.Name + ": " + n.Status));
     private GpuEncoderConverter? _converter;
     private long _videoPts, _audioPts;
     private int _audioFilled;
@@ -27,9 +31,9 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     public string TimingSummary => string.Join("/", _timings.Select(t => (t / Math.Max(1, _submitted)).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)));
     public long VideoFrames => _videoPts;
     public long AudioSamples => _audioPts;
-    public HardwareStreamEncoder(GpuDevice gpu, HlsSegmentStore store, int width, int height, int fpsNum, int fpsDen, StreamSettings settings)
+    public HardwareStreamEncoder(GpuDevice gpu, HlsSegmentStore store, int width, int height, int fpsNum, int fpsDen, StreamSettings settings, IEnumerable<NetworkStreamOutput>? outputs = null)
     {
-        _gpu = gpu;
+        _gpu = gpu; _software = settings.Encoder == "libx264";
         try
         {
             AVCodec* videoCodec = ffmpeg.avcodec_find_encoder_by_name(settings.Encoder);
@@ -39,7 +43,9 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _video->width = width; _video->height = height;
             _video->time_base = new AVRational { num = fpsDen, den = fpsNum };
             _video->framerate = new AVRational { num = fpsNum, den = fpsDen };
-            _video->pix_fmt = AVPixelFormat.AV_PIX_FMT_D3D11;
+            _video->pix_fmt = _software ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_D3D11;
+            _video->flags |= ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER;
+            if (_software) _video->thread_count = Math.Clamp(Environment.ProcessorCount / 4, 1, 8);
             _video->bit_rate = settings.VideoBitrateKbps * 1000L;
             _video->rc_max_rate = _video->bit_rate; _video->rc_buffer_size = settings.VideoBitrateKbps * 1000;
             _video->gop_size = Math.Max(1, (int)Math.Round((double)fpsNum / fpsDen * settings.SegmentSeconds));
@@ -63,13 +69,15 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             *(uint*)((byte*)frameContext->hwctx + IntPtr.Size) = (uint)Vortice.Direct3D11.BindFlags.RenderTarget;
             FFmpegRuntime.Check(ffmpeg.av_hwframe_ctx_init(_frames), "Create GPU encoder frame pool");
             _converter = new(gpu, width, height, fpsNum, fpsDen);
-            _video->hw_frames_ctx = ffmpeg.av_buffer_ref(_frames);
+            if (!_software) _video->hw_frames_ctx = ffmpeg.av_buffer_ref(_frames);
             AVDictionary* options = null;
-            ffmpeg.av_dict_set(&options, "preset", "p3", 0);
-            ffmpeg.av_dict_set(&options, "tune", "ull", 0);
-            ffmpeg.av_dict_set(&options, "rc", "cbr", 0);
-            ffmpeg.av_dict_set(&options, "zerolatency", "1", 0);
-            ffmpeg.av_dict_set(&options, "forced-idr", "1", 0);
+            ffmpeg.av_dict_set(&options, "preset", _software ? "veryfast" : "p3", 0);
+            ffmpeg.av_dict_set(&options, "tune", _software ? "zerolatency" : "ull", 0);
+            if (!_software)
+            {
+                ffmpeg.av_dict_set(&options, "rc", "cbr", 0); ffmpeg.av_dict_set(&options, "zerolatency", "1", 0);
+                ffmpeg.av_dict_set(&options, "forced-idr", "1", 0);
+            }
             try { FFmpegRuntime.Check(ffmpeg.avcodec_open2(_video, videoCodec, &options), "Open hardware video encoder"); }
             finally { ffmpeg.av_dict_free(&options); }
             AVCodec* audioCodec = ffmpeg.avcodec_find_encoder(AVCodecID.AV_CODEC_ID_AAC);
@@ -81,13 +89,14 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _audio->bit_rate = settings.AudioBitrateKbps * 1000L;
             ffmpeg.av_channel_layout_default(&_audio->ch_layout, 2);
             FFmpegRuntime.Check(ffmpeg.avcodec_open2(_audio, audioCodec, null), "Open stream audio encoder");
-            _videoFrame = ffmpeg.av_frame_alloc(); _audioFrame = ffmpeg.av_frame_alloc(); _packet = ffmpeg.av_packet_alloc();
-            if (_videoFrame == null || _audioFrame == null || _packet == null) throw new OutOfMemoryException();
+            _videoFrame = ffmpeg.av_frame_alloc(); _audioFrame = ffmpeg.av_frame_alloc(); _packet = ffmpeg.av_packet_alloc(); _softwareFrame = ffmpeg.av_frame_alloc();
+            if (_videoFrame == null || _audioFrame == null || _packet == null || _softwareFrame == null) throw new OutOfMemoryException();
             _audioFrame->format = (int)_audio->sample_fmt; _audioFrame->sample_rate = 48000;
             _audioFrame->nb_samples = _audio->frame_size;
             FFmpegRuntime.Check(ffmpeg.av_channel_layout_copy(&_audioFrame->ch_layout, &_audio->ch_layout), "Copy stream channel layout");
             FFmpegRuntime.Check(ffmpeg.av_frame_get_buffer(_audioFrame, 0), "Allocate stream audio frame");
-            _muxer = new TsSegmentMuxer(store, _video, _audio, settings.SegmentSeconds);
+            if (settings.HlsEnabled) _muxer = new TsSegmentMuxer(store, _video, _audio, settings.SegmentSeconds);
+            foreach (var output in outputs ?? []) if (output.Enabled) _network.Add(new(output, _video, _audio));
         }
         catch { Dispose(); throw; }
     }
@@ -110,7 +119,14 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
         _videoFrame->pts = pts; _videoPts = pts + 1;
         _videoFrame->pict_type = key ? AVPictureType.AV_PICTURE_TYPE_I : AVPictureType.AV_PICTURE_TYPE_NONE;
         _videoFrame->color_range = _video->color_range; _videoFrame->colorspace = _video->colorspace;
-        FFmpegRuntime.Check(ffmpeg.avcodec_send_frame(_video, _videoFrame), "Submit video to encoder");
+        AVFrame* encodeFrame = _videoFrame;
+        if (_software)
+        {
+            ffmpeg.av_frame_unref(_softwareFrame);
+            FFmpegRuntime.Check(ffmpeg.av_hwframe_transfer_data(_softwareFrame, _videoFrame, 0), "Transfer frame for software encoder");
+            FFmpegRuntime.Check(ffmpeg.av_frame_copy_props(_softwareFrame, _videoFrame), "Copy software frame properties"); encodeFrame = _softwareFrame;
+        }
+        FFmpegRuntime.Check(ffmpeg.avcodec_send_frame(_video, encodeFrame), "Submit video to encoder");
         Profile(2, ref time);
         DrainVideo();
         Profile(3, ref time); _submitted++;
@@ -144,7 +160,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             int result = ffmpeg.avcodec_receive_packet(_video, _packet);
             if (result == ffmpeg.AVERROR(ffmpeg.EAGAIN) || result == ffmpeg.AVERROR_EOF) break;
             FFmpegRuntime.Check(result, "Read encoded video");
-            _muxer!.WriteVideo(_packet); ffmpeg.av_packet_unref(_packet);
+            _muxer?.WriteVideo(_packet); foreach (var output in _network) output.Write(_packet, 0); ffmpeg.av_packet_unref(_packet);
         }
     }
     private void DrainAudio()
@@ -154,7 +170,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             int result = ffmpeg.avcodec_receive_packet(_audio, _packet);
             if (result == ffmpeg.AVERROR(ffmpeg.EAGAIN) || result == ffmpeg.AVERROR_EOF) break;
             FFmpegRuntime.Check(result, "Read encoded audio");
-            _muxer!.WriteAudio(_packet); ffmpeg.av_packet_unref(_packet);
+            _muxer?.WriteAudio(_packet); foreach (var output in _network) output.Write(_packet, 1); ffmpeg.av_packet_unref(_packet);
         }
     }
     public void Complete()
@@ -167,11 +183,13 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
         }
         FFmpegRuntime.Check(ffmpeg.avcodec_send_frame(_video, null), "Flush video encoder"); DrainVideo();
         FFmpegRuntime.Check(ffmpeg.avcodec_send_frame(_audio, null), "Flush audio encoder"); DrainAudio();
-        _muxer!.Complete(); _completed = true;
+        _muxer?.Complete(); _completed = true;
     }
     public void Dispose()
     {
         _muxer?.Dispose(); _muxer = null;
+        foreach (var output in _network) output.Dispose(); _network.Clear();
+        var sf = _softwareFrame; _softwareFrame = null; if (sf != null) ffmpeg.av_frame_free(&sf);
         _converter?.Dispose(); _converter = null;
         var vf = _videoFrame; _videoFrame = null; if (vf != null) ffmpeg.av_frame_free(&vf);
         var af = _audioFrame; _audioFrame = null; if (af != null) ffmpeg.av_frame_free(&af);

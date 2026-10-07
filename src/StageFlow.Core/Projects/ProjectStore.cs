@@ -16,6 +16,7 @@ public static class ProjectStore
         if (info.Length > 16 * 1024 * 1024) throw new InvalidDataException("Project file is too large.");
         var project = JsonSerializer.Deserialize<ShowProject>(File.ReadAllText(path), Options)
             ?? throw new InvalidDataException("Empty project.");
+        if (project.SchemaVersion == 1) project = project with { SchemaVersion = ShowProject.CurrentSchema };
         project.Validate();
         if (project.MediaPath is { Length: > 0 } media && !Path.IsPathRooted(media))
             project = project with { MediaPath = Path.GetFullPath(media, Path.GetDirectoryName(Path.GetFullPath(path))!) };

@@ -49,7 +49,7 @@ is independent of HLS gain/mute. Positive audio offset advances audio; positive
 MTC output offset advances timecode. Local device buffers and downstream HLS latency
 remain. The browser requires a Play gesture for audio.
 
-HLS contains H.264/AAC, normally one-second MPEG-TS segments and six playlist entries.
+HLS contains H.264/AAC by default (HEVC is selectable), normally one-second MPEG-TS segments and six playlist entries.
 This is conventional HLS, not LL-HLS/WebRTC; expect seconds of latency. All viewers
 share one encoder. Stop closes the listener. The page retries after stream restart.
 
@@ -65,4 +65,27 @@ removal requires restarting the app.
 
 Projects have allocation bounds, which do not imply that every 8K/240 fps setting
 or thousands of clock styles fits the GPU. Rehearse the actual show at its output
-resolution/bitrate and inspect Status.
+resolution/bitrate and inspect Monitor.
+
+## V2 network protocols
+
+NDI and OMT support discovered/manual LAN video sources and named program senders
+with stereo audio. SRT accepts a live source URL and can send MPEG-TS to configured
+destinations. RTMP/RTMPS output uses H.264/AAC in FLV. All encoded destinations share
+one codec/bitrate/rate; independent per-output encoding profiles are not provided.
+
+NVENC H.264, NVENC HEVC and CPU libx264 are selectable. AMD AMF/Intel QSV are not
+implemented; libx264 does not remove the hardware-decoding requirement. NDI/OMT
+SDK paths use CPU video buffers with nonblocking GPU staging; do not assume Spout's
+zero-copy cost. NDI HX/HDR interoperability and large multi-source workloads have
+not been certified. Native runtime provenance and notices are included.
+
+Live input audio is optional per layer and feeds both local and program mixes.
+Inputs automatically retry disconnects. Failed RTMP/SRT destinations require a
+stream restart. There is no virtual camera, HLS/RTMP input picker, recording-to-file
+or external MIDI control mapper in v2 alpha.2. OSC diagnostic recording captures
+performance logs, not a movie.
+
+OSC listens on the configured UDP interface/port with exact-address mappings.
+No authentication, address wildcard matching or outbound feedback is implemented.
+Project files contain destination URLs and any embedded stream keys in readable JSON.
