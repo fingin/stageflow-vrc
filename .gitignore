@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+artifacts/
+runtime/
+*.user
+*.log
+*.stageflow.bak

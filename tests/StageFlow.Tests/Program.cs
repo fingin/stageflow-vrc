@@ -1,0 +1,197 @@
+using System.Net;
+using System.Net.Sockets;
+using StageFlow.Core.ArtNet;
+using StageFlow.Core.Grid;
+using StageFlow.Core.Projects;
+using StageFlow.Core.Timing;
+
+var tests = new (string Name, Action Body)[]
+{
+    ("timecode rates and day wrap", () =>
+    {
+        foreach (var rate in Enum.GetValues<MtcRate>())
+        {
+            Equal("00:00:00" + (rate == MtcRate.Drop2997 ? ";" : ":") + "00", Timecode.FromFrameNumber(0, rate).ToString());
+            Equal(0L, Timecode.FromFrameNumber(rate.FramesPerDay(), rate).ToFrameNumber());
+            Equal(rate.FramesPerDay() - 1, Timecode.FromFrameNumber(-1, rate).ToFrameNumber());
+            for (long frame = 0; frame < rate.FramesPerDay(); frame += 113)
+                Equal(frame, Timecode.FromFrameNumber(frame, rate).ToFrameNumber());
+        }
+    }),
+    ("drop frame minute, ten minute and hour boundaries", () =>
+    {
+        Equal("00:01:00;02", Timecode.FromFrameNumber(1800, MtcRate.Drop2997).ToString());
+        Equal("00:10:00;00", Timecode.FromFrameNumber(17982, MtcRate.Drop2997).ToString());
+        Equal("01:00:00;00", Timecode.FromFrameNumber(107892, MtcRate.Drop2997).ToString());
+        Check(!Timecode.TryParse("00:01:00;00", MtcRate.Drop2997, out _));
+        Check(!Timecode.TryParse("00:01:00;01", MtcRate.Drop2997, out _));
+        Check(Timecode.TryParse("00:10:00;00", MtcRate.Drop2997, out _));
+    }),
+    ("MTC full frame golden wire bytes", () =>
+    {
+        Span<byte> message = stackalloc byte[10];
+        var tc = new Timecode(1, 2, 3, 24, MtcRate.Fps25);
+        MtcCodec.WriteFullFrame(tc, message);
+        Check(message.SequenceEqual(new byte[] { 0xf0, 0x7f, 0x7f, 1, 1, 0x21, 2, 3, 24, 0xf7 }));
+        Check(MtcCodec.TryReadFullFrame(message, out var parsed)); Equal(tc, parsed);
+        message[8] = 25; Check(!MtcCodec.TryReadFullFrame(message, out _));
+        Check(!MtcCodec.TryReadFullFrame(message[..9], out _));
+    }),
+    ("MTC quarter-frame ordering and compensation", () =>
+    {
+        var decoder = new MtcQuarterFrameDecoder();
+        var tc = new Timecode(1, 2, 3, 12, MtcRate.Fps30);
+        byte[] golden = [0x0c, 0x10, 0x23, 0x30, 0x42, 0x50, 0x61, 0x76];
+        for (int i = 0; i < 8; i++) Equal(golden[i], MtcCodec.QuarterFrame(tc, i));
+        for (int i = 0; i < 7; i++) Check(!decoder.Push(golden[i], out _));
+        Check(decoder.Push(golden[7], out var value)); Equal(tc.AddFrames(2), value);
+        for (int i = 7; i > 0; i--) Check(!decoder.Push(golden[i], out _));
+        Check(decoder.Push(golden[0], out value)); Equal(tc.AddFrames(-2), value);
+        decoder.Reset();
+        Check(!decoder.Push(golden[0], out _)); Check(!decoder.Push(golden[2], out _));
+        for (int i = 3; i < 8; i++) Check(!decoder.Push(golden[i], out _));
+    }),
+    ("transport play pause seek loop and end", () =>
+    {
+        var clock = new ManualClock(); var transport = new Transport(clock);
+        transport.Load(TimeSpan.FromSeconds(20)); transport.Play(); clock.Advance(3);
+        Equal(TimeSpan.FromSeconds(3), transport.Snapshot().Position);
+        transport.Pause(); clock.Advance(10); Equal(TimeSpan.FromSeconds(3), transport.Snapshot().Position);
+        transport.SetLoop(true, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+        transport.Play(); clock.Advance(9); Equal(TimeSpan.FromSeconds(3), transport.Snapshot().Position);
+        transport.SetLoop(false, TimeSpan.Zero, TimeSpan.Zero); transport.Seek(TimeSpan.FromSeconds(19));
+        clock.Advance(4); Equal(TransportState.Paused, transport.Snapshot().State);
+        Equal(TimeSpan.FromSeconds(20), transport.Snapshot().Position);
+    }),
+    ("transport frame stepping does not stick on fractional boundaries", () =>
+    {
+        foreach (var rate in Enum.GetValues<MtcRate>())
+        {
+            var t = new Transport(new ManualClock()); t.Load(TimeSpan.FromHours(1)); t.ConfigureClock(ClockMode.Internal, rate, 0);
+            for (int i = 1; i <= 500; i++) { t.Step(1); Equal((long)i, t.Snapshot().Timecode.ToFrameNumber()); }
+            for (int i = 499; i >= 0; i--) { t.Step(-1); Equal((long)i, t.Snapshot().Timecode.ToFrameNumber()); }
+        }
+    }),
+    ("external MTC locate, follow, local transport exclusion and timeout", () =>
+    {
+        var clock = new ManualClock(); var t = new Transport(clock); t.Load(TimeSpan.FromMinutes(10));
+        t.ConfigureClock(ClockMode.IncomingMtc, MtcRate.Fps30, 30 * 3600);
+        t.Play(); Equal(TransportState.WaitingForSync, t.Snapshot().State);
+        t.ReceiveMtc(new(1, 0, 10, 0, MtcRate.Fps30), false); Equal(TimeSpan.FromSeconds(10), t.Snapshot().Position);
+        t.Seek(TimeSpan.Zero); Equal(TimeSpan.FromSeconds(10), t.Snapshot().Position);
+        t.ReceiveMtc(new(1, 0, 10, 0, MtcRate.Fps30), true); clock.Advance(0.2);
+        Equal(TimeSpan.FromSeconds(10.2), t.Snapshot().Position);
+        clock.Advance(5); Equal(TransportState.SyncLost, t.Snapshot().State);
+        Equal(TimeSpan.FromSeconds(10.5), t.Snapshot().Position);
+    }),
+    ("ArtDmx wire byte order and malformed packets", () =>
+    {
+        Span<byte> buffer = stackalloc byte[530]; byte[] channels = [1, 128, 254, 255];
+        int size = ArtNetPacket.WriteDmx(buffer, 0x1234, 20, channels);
+        Equal((byte)0x34, buffer[14]); Equal((byte)0x12, buffer[15]); Equal((byte)0, buffer[16]); Equal((byte)4, buffer[17]);
+        Check(ArtNetPacket.TryReadDmx(buffer[..size], out var packet));
+        Equal((ushort)0x1234, packet.Universe); Check(packet.Channels.SequenceEqual(channels));
+        for (int i = 0; i < size; i++) Check(!ArtNetPacket.TryReadDmx(buffer[..i], out _));
+        buffer[17] = 3; Check(!ArtNetPacket.TryReadDmx(buffer[..size], out _));
+    }),
+    ("Art-Net sequence rollover, zero sequence and short packet", () =>
+    {
+        var store = new DmxUniverseStore(0, 1); byte[] data = [7, 8];
+        Check(store.Apply(new(0, 255, 0, data), 1, 1, 1000));
+        Check(store.Apply(new(0, 1, 0, data), 1, 2, 1000));
+        Check(!store.Apply(new(0, 255, 0, data), 1, 3, 1000));
+        Check(store.Apply(new(0, 0, 0, data), 1, 4, 1000));
+        Span<byte> snapshot = stackalloc byte[512]; store.CopyTo(snapshot);
+        Equal((byte)7, snapshot[0]); Equal((byte)0, snapshot[511]); Equal(1L, store.OutOfOrder);
+    }),
+    ("BinaryStageFlight MSB order, CRC and wrap", () =>
+    {
+        var layout = new GridLayout { Encoding = GridEncoding.BinaryStageFlight, UniverseCount = 1, Width = 16, Height = 8192 };
+        var cells = new GridCell[GridEncoder.RequiredCellCapacity(layout)];
+        int count = new GridEncoder().Encode(layout, new byte[] { 0x80, 0x01, 0x55, 0xaa, 0xff, 0 }, cells);
+        Equal(52, count); Equal((byte)255, cells[0].R); Equal((byte)0, cells[7].R); Equal((byte)255, cells[15].R);
+        Equal(192, cells[48].Y); Equal(-1, cells[48].Channel);
+        byte[] channels = new byte[25]; channels[24] = 255;
+        count = new GridEncoder().Encode(layout, channels, cells);
+        Equal(0, cells[24 * 8].X); Equal(208, cells[24 * 8].Y);
+        Equal(25 * 8 + 5 * 4, count); // Partial CRC group is safely padded.
+    }),
+    ("VRSL known positions and RGB packing", () =>
+    {
+        var layout = new GridLayout { UniverseCount = 9, RgbPacking = true, GammaCorrection = false };
+        Equal((0, 0), GridEncoder.VrslPosition(layout, 0)); Equal((624, 64), GridEncoder.VrslPosition(layout, 511));
+        Equal((640, 0), GridEncoder.VrslPosition(layout, 512));
+        byte[] channels = new byte[9 * 512]; channels[0] = 1; channels[1536] = 2; channels[3072] = 3;
+        var cells = new GridCell[GridEncoder.RequiredCellCapacity(layout)];
+        Equal(1536, new GridEncoder().Encode(layout, channels, cells));
+        Equal((byte)1, cells[0].R); Equal((byte)2, cells[0].G); Equal((byte)3, cells[0].B);
+    }),
+    ("Hnode import selects serializer, not inactive deserializer", () =>
+    {
+        const string yaml = "serializer: !BinaryStageFlight {}\ndeserializer: !VRSL {}\ngenerators: []\nexporters:\n- !MIDIDMX\n  midiDevice: loopMIDI Port\n  channelsPerUpdate: 100\n  idleScanChannels: 10\ntranscode: false\nserializeUniverseCount: 2147483647\noutputResolution: 2560x1440\nartNetAddress: 127.0.0.1\ntargetFramerate: 60\n";
+        var imported = HnodeImporter.Import(yaml).Project;
+        Equal(2560, imported.Width); Equal(1440, imported.Height);
+        Equal(GridEncoding.BinaryStageFlight, imported.Layers[1].Grid!.Encoding);
+        Equal("loopMIDI Port", imported.MidiDmx.OutputDevice!); Check(imported.ArtNet.AutomaticUniverseCount);
+        Equal(45, imported.ArtNet.UniverseCount); Equal(1028, HnodeImporter.ParseChannel("3.5"));
+        Throws<InvalidDataException>(() => HnodeImporter.Import(yaml.Replace("transcode: false", "transcode: true")));
+        Throws<InvalidDataException>(() => HnodeImporter.Import(yaml.Replace("!BinaryStageFlight", "!Unknown")));
+    }),
+    ("project atomic save backup and relative media resolution", () =>
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "StageFlowTests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
+        try
+        {
+            string path = Path.Combine(dir, "show.stageflow"), media = Path.Combine(dir, "movie.mp4");
+            var p = new ShowProject { Name = "First", MediaPath = media };
+            ProjectStore.Save(p, path); Equal(media, ProjectStore.Load(path).MediaPath!);
+            ProjectStore.Save(p with { Name = "Second" }, path);
+            Equal("First", ProjectStore.Load(path + ".bak").Name); Equal("Second", ProjectStore.Load(path).Name);
+            Check(!File.ReadAllText(path).Contains(dir.Replace("\\", "\\\\")));
+        }
+        finally { Directory.Delete(dir, true); }
+    }),
+    ("edit history undo redo and branching", () =>
+    {
+        var h = new EditHistory<int>(0); h.Apply("one", 1); h.Apply("two", 2);
+        Check(h.Undo()); Equal(1, h.Current); Check(h.Redo()); Equal(2, h.Current);
+        Check(h.Undo()); h.Apply("three", 3); Check(!h.Redo()); Equal("three", h.UndoName!);
+    }),
+    ("UDP Art-Net reception and cancellation", () =>
+    {
+        var store = new DmxUniverseStore(0, 1);
+        var receiver = new ArtNetReceiver(store, IPAddress.Loopback, 0); receiver.Start();
+        try
+        {
+            using var udp = new UdpClient(); byte[] packet = new byte[20]; ArtNetPacket.WriteDmx(packet, 0, 1, [10, 20]);
+            udp.Send(packet, new IPEndPoint(IPAddress.Loopback, receiver.Port));
+            Check(SpinWait.SpinUntil(() => store.Accepted == 1, 2000));
+        }
+        finally { receiver.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+    })
+};
+int failures = 0;
+foreach (var (name, body) in tests)
+{
+    try { body(); Console.WriteLine($"PASS {name}"); }
+    catch (Exception ex) { failures++; Console.Error.WriteLine($"FAIL {name}: {ex}"); }
+}
+if (args.Length == 2 && args[0] == "--hnode")
+{
+    try { var result = HnodeImporter.Import(File.ReadAllText(args[1])); Console.WriteLine($"PASS actual Hnode import: {result.Project.Width}x{result.Project.Height}, {result.Project.Layers[1].Grid!.Encoding}"); }
+    catch (Exception ex) { failures++; Console.Error.WriteLine(ex); }
+}
+Console.WriteLine($"{tests.Length - failures}/{tests.Length} checks passed");
+return failures == 0 ? 0 : 1;
+
+static void Check(bool condition) { if (!condition) throw new Exception("Assertion failed"); }
+static void Equal<T>(T expected, T actual) where T : notnull
+{ if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"Expected {expected}, got {actual}"); }
+static void Throws<T>(Action action) where T : Exception
+{ try { action(); } catch (T) { return; } throw new Exception($"Expected {typeof(T).Name}"); }
+sealed class ManualClock : IMonotonicClock
+{
+    public long Ticks { get; private set; }
+    public long Frequency => TimeSpan.TicksPerSecond;
+    public void Advance(double seconds) => Ticks += TimeSpan.FromSeconds(seconds).Ticks;
+}
