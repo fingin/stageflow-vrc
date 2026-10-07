@@ -1,9 +1,10 @@
-# StageFlow 2.0.0-alpha.2
+# StageFlow 2.0.0-alpha.3
 
 A Windows show workspace for video, timecode, Art-Net grids, compositing and live
 video routing. This is the independent **v2 fork**. V1 remains frozen.
 
-Launch **StageFlow.App.exe** in **StageFlow-v2-Portable**. The portable build bundles
+Launch **StageFlow.App.exe** in the portable folder (this release is in
+**StageFlow-v2-Portable-alpha.3**). Save and close the previous build before switching. The portable build bundles
 .NET, the native media/network libraries and the HLS player. It runs as one
 application process; OBS, MediaMTX, Hnode and an external FFmpeg process are not
 required. Existing Windows MIDI ports, including loopMIDI, remain selectable.
@@ -41,11 +42,12 @@ RGB; enter #AARRGGBB to set exact alpha. Duplicate layers to add more clocks.
 
 ## Workspace and settings
 
-The preview keeps the show aspect ratio when the window changes size. Resize the
+The framed black canvas keeps the show aspect ratio when the window changes size.
+A contrasting workspace surrounds it, so empty black output has visible boundaries. Resize the
 hierarchy/inspector dividers, hide panes through View, float the inspector, or reset
 the workspace. Menus, tabs, buttons and surfaces share the selected palette.
 
-Preferences has global search and 15 named sections:
+Preferences has global search and 16 named sections:
 
 | Sections | Controls |
 |---|---|
@@ -58,7 +60,7 @@ Preferences has global search and 15 named sections:
 | Encoding / HLS server | Encoder, bitrates, keyframe/segment duration, server and playlist |
 | Spout / NDI & OMT | Program output enable switches and advertised names |
 | RTMP & SRT | Named output destinations and enable switches |
-| OSC | Receiver interface/port and access to control mappings |
+| OSC / OSC mappings | Command input, state feedback, destinations, add/remove/learn and live mapping properties |
 | Diagnostics | Recording at startup, status cadence, logs and reconnect/reset tools |
 
 Changes take effect on Enter or leaving an editor; there are no Apply buttons.
@@ -101,20 +103,40 @@ the selected port. HLS is conventional segmented HTTP playback, with seconds of
 latency. The server has no login/TLS; firewall/router settings are not changed.
 Browser audio needs a user Play gesture. NDI® is a registered trademark of Vizrt NDI AB.
 
-## OSC controls
+## OSC controls and feedback
 
-Enable the OSC receiver in Preferences, then open the **OSC** workspace tab.
-Add a mapping, type an exact address (or Learn the next message), select an action
-and trigger. Use More → Bind selected layer for layer actions. Example: map
-**/project/record → Play → RisingEdge** for an OSC Pilot button. The address is
-user-defined; the chosen action determines what it does.
+All OSC configuration is now in **Edit → Preferences → OSC** and **OSC mappings**.
+The main inspector has no OSC tab. Add and Remove are explicit buttons. Choose a
+mapping in the list to edit its control, trigger, target layer, range and feedback
+properties below. Changes are live and undoable. Learn captures the next command.
 
-Actions cover transport, seeks, cue navigation, volumes/mutes, layer visibility/
-opacity, streams and diagnostic recording. Value mappings scale a normalized input
-through configured minimum/maximum values. Press/RisingEdge prevent button-release
-messages from triggering a second action. OSC bundles and bounded future timetags
-are supported. Address wildcards, outgoing feedback and MIDI control mapping are
-not implemented in this build.
+For OSC Pilot on the same PC, enable the StageFlow receiver on port **9000** and
+feedback to **127.0.0.1:9001**. In OSC Pilot, use Send To Port **9000** and Listen On
+Port **9001**. On another computer/tablet, replace the feedback IP with that device's
+LAN address. Input and feedback have independent switches and start off for old shows.
+
+New mappings use unique /transport/play addresses. Changing the selected action
+sets appropriate button/fader defaults and preserves a custom address. For example,
+**/project/record → Play → Press** remains a valid custom mapping. Mute and visibility
+use EveryMessage so zero switches them off; continuous controls use Value with a
+0–1 range by default. SeekSeconds defaults to 0–60 seconds. Reset control defaults
+restores trigger/range/argument/type without erasing the address or target.
+
+Feedback reports actual transport, seek, audio, layer, stream and diagnostic states,
+including changes made locally. Play returns 1 while playing and 0 otherwise. Leave
+Feedback Address empty to use the command address, or set a separate indicator
+address. Float32 is the default; Int32/Boolean and argument indices are configurable.
+Value feedback reverses the configured range to normalized 0–1. Next/previous cue
+buttons have no persistent state and return 0.
+
+Default cadence is 100 ms, changed values only, plus a full refresh every two seconds
+for restarted controllers. Send current state forces a refresh. A bounded background
+sender keeps network operations away from the video/MTC threads. A sent count reports
+UDP sends, not delivery acknowledgement. Use a separate feedback address if a remote
+controller is configured to echo received values back as commands.
+
+See [OSC setup and defaults](docs/OSC.md), including the OSC Pilot documentation.
+Address wildcards and MIDI control mapping are not implemented in this build.
 
 ## Keyboard and recovery
 

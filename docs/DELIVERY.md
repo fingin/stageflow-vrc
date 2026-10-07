@@ -1,7 +1,7 @@
 # StageFlow v2 delivery contract
 
-Status: independent v2 alpha.2 portable, with the modern workspace, live settings,
-network protocols and OSC implemented. V1 is frozen. External show certification
+Status: independent v2 alpha.3 portable, with the modern workspace, live settings,
+network protocols, OSC control/feedback and a Preferences mapping editor implemented. V1 is frozen. External show certification
 and long-duration validation remain open; see VALIDATION.md and V2-REVIEW.md.
 
 ## User workflows

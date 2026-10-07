@@ -1,5 +1,8 @@
 using System.Text.Json;
 using StageFlow.App;
+using StageFlow.Core.Osc;
+using System.Net;
+using System.Net.Sockets;
 
 namespace StageFlow.UiTests;
 
@@ -64,7 +67,7 @@ internal static class Program
                     window.ShowPreferences(section);
                     await Task.Delay(5);
                     var prefs = window.OwnedForms.Single(f => f.Text.EndsWith("Preferences"));
-                    var grid = Descendants(prefs).OfType<PropertyGrid>().Single();
+                    var grid = Descendants(prefs).OfType<PropertyGrid>().Single(g => g.Name == "PreferenceProperties");
                     if (grid.SelectedObject is not LiveProperties properties || properties.GetProperties().Count == 0)
                         throw new Exception("Empty preferences section: " + section);
                     if (properties.GetPropertyOwner(null) != properties) throw new Exception("PropertyGrid descriptor owner is missing.");
@@ -96,16 +99,72 @@ internal static class Program
                 window.SaveTo(Path.Combine(state, "settings.stageflow"));
                 if (StageFlow.Core.Projects.ProjectStore.Load(Path.Combine(state, "settings.stageflow")).Audio.LocalVolume != 0.4f) throw new Exception("Live settings were not saved.");
                 Console.WriteLine("PASS: consecutive live settings, undo/redo, invalid value rollback, and project persistence.");
+                window.ShowPreferences("OSC mappings"); await Task.Delay(20);
+                var oscPrefs = window.OwnedForms.Single(f => f.Text.EndsWith("Preferences"));
+                var oscList = Descendants(oscPrefs).OfType<DataGridView>().Single(g => g.Name == "OscMappingList");
+                var oscEditor = Descendants(oscPrefs).OfType<PropertyGrid>().Single(g => g.Name == "OscMappingProperties");
+                if (!oscList.Visible || Descendants(window).OfType<DataGridView>().Any(g => g.Name == "OscMappingList")) throw new Exception("OSC did not move into Preferences.");
+                Descendants(oscPrefs).OfType<Button>().Single(b => b.Text == "Add mapping").PerformClick();
+                if (window.WorkingProject.Osc.Mappings.Single().Address != "/transport/play") throw new Exception("New OSC defaults are incorrect.");
+                oscList.Rows[0].Cells["Enabled"].Value = false;
+                if (window.WorkingProject.Osc.Mappings[0].Enabled) throw new Exception("Inline mapping enable toggle failed.");
+                oscList.Rows[0].Cells["Enabled"].Value = true;
+                var mapping = (LiveProperties)oscEditor.SelectedObject!;
+                mapping.GetProperties()["Action"]!.SetValue(mapping, ControlAction.LocalVolume);
+                if (window.WorkingProject.Osc.Mappings.Single().Trigger != OscTrigger.Value) throw new Exception("Fader defaults are incorrect.");
+                mapping.GetProperties()["Address"]!.SetValue(mapping, "/project/record");
+                mapping.GetProperties()["Action"]!.SetValue(mapping, ControlAction.StreamVolume);
+                if (window.WorkingProject.Osc.Mappings.Single().Address != "/project/record") throw new Exception("Action changes overwrite custom addresses.");
+                mapping.GetProperties()["Action"]!.SetValue(mapping, ControlAction.LocalVolume);
+                await window.DrainLiveEdits();
+                Descendants(oscPrefs).OfType<Button>().Single(b => b.Text == "Add mapping").PerformClick(); await window.DrainLiveEdits();
+                Descendants(oscPrefs).OfType<Button>().Single(b => b.Text == "Remove").PerformClick(); await window.DrainLiveEdits();
+                if (window.WorkingProject.Osc.Mappings.Count != 1) throw new Exception("Remove OSC mapping failed.");
+                await window.Undo(); if (window.WorkingProject.Osc.Mappings.Count != 2) throw new Exception("OSC remove undo failed.");
+                await window.Redo(); if (window.WorkingProject.Osc.Mappings.Count != 1) throw new Exception("OSC remove redo failed.");
+                using (var receiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
+                {
+                    var osc = window.BuildPreferenceProperties("OSC");
+                    osc.GetProperties()["FeedbackPort"]!.SetValue(osc, ((IPEndPoint)receiver.Client.LocalEndPoint!).Port);
+                    osc.GetProperties()["FeedbackEnabled"]!.SetValue(osc, true);
+                    await window.DrainLiveEdits();
+                    async Task Expect(float expected)
+                    {
+                        using var timeout = new CancellationTokenSource(3000);
+                        while (true)
+                        {
+                            var packet = await receiver.ReceiveAsync(timeout.Token);
+                            if (OscCodec.TryDecode(packet.Buffer, out var values) && values.Any(v => v.Address == "/project/record" && v.Arguments[0] is float f && Math.Abs(f - expected) < .0001)) return;
+                        }
+                    }
+                    await Expect(.4f);
+                    audio.GetProperties()["LocalVolume"]!.SetValue(audio, .7f); await window.DrainLiveEdits(); await Expect(.7f);
+                    window.SendOscFeedback(true); await Expect(.7f);
+                    osc.GetProperties()["FeedbackEnabled"]!.SetValue(osc, false); await window.DrainLiveEdits();
+                }
+                Capture(oscPrefs, "OSC-mappings.png");
+                window.ShowPreferences("OSC"); await Task.Delay(20); Capture(oscPrefs, "OSC-feedback.png");
+                oscPrefs.Close(); window.ShowPreferences("OSC mappings"); await Task.Delay(20);
+                if (Descendants(window.OwnedForms.Single(f => f.Text.EndsWith("Preferences"))).OfType<DataGridView>().Single().Rows.Count != 1) throw new Exception("Reopening preferences lost OSC mappings.");
                 window.OwnedForms.Single(f => f.Text.EndsWith("Preferences")).Close();
+                Console.WriteLine("PASS: OSC Preferences add/remove, action defaults, custom addresses, undo/redo, reopen and actual local-edit UDP feedback.");
                 var previewHost = Descendants(window).OfType<AspectPreviewHost>().Single();
                 foreach (var size in new[] { new Size(1100,720), new Size(1920,1080), new Size(1200,900), new Size(1500,780) })
                 {
                     window.Size = size; window.PerformLayout(); await Task.Delay(5);
-                    var preview = previewHost.Controls[0]; var fitted = AspectPreviewHost.Fit(previewHost.ClientSize, new Size(1920,1080));
+                    var preview = previewHost.Controls[0]; var fitted = previewHost.ProgramBounds;
                     if (preview.Bounds != fitted || !previewHost.ClientRectangle.Contains(preview.Bounds) || preview.Width < 100)
                         throw new Exception($"Preview layout failed at {size}: {preview.Bounds}, host {previewHost.ClientSize}");
                     if (Math.Abs(preview.Width - preview.Height * (1920.0/1080)) > 2) throw new Exception("Preview stretched during resize.");
                 }
+                if (previewHost.BackColor == Color.Black || previewHost.Controls[0].BackColor != Color.Black) throw new Exception("Canvas bounds blend into the workspace.");
+                foreach (var canvas in new[] { new Size(1080,1920), new Size(1000,1000), new Size(2560,1440) })
+                {
+                    previewHost.CanvasSize = canvas; await Task.Delay(10);
+                    var bounds = previewHost.Controls[0].Bounds;
+                    if (Math.Abs(bounds.Width - bounds.Height * (canvas.Width/(double)canvas.Height)) > 2 || bounds.Left < 10 || bounds.Top < 10) throw new Exception("Output aspect or canvas frame changed on resize.");
+                }
+                previewHost.CanvasSize = new Size(1920,1080);
                 if (Descendants(window).OfType<TabControl>().Any()) throw new Exception("Native tab coloring returned.");
                 window.Size = new Size(1600, 1000); await Task.Delay(10);
                 var layerList = Descendants(window).OfType<ListBox>().Single(l => l.Items.Cast<object>().Any(x => x.ToString() == "Master timecode"));
@@ -121,7 +180,7 @@ internal static class Program
                         window.Size = size; window.PerformLayout(); await Task.Delay(20);
                         Capture(window, $"Workspace-{size.Width}-{font}.png");
                         var tabs = Descendants(window).OfType<WorkspaceTabs>().Single();
-                        foreach (int tab in new[] { 0, 1, 2 })
+                        foreach (int tab in Enumerable.Range(0, tabs.TabPages.Count))
                         {
                             tabs.SelectedIndex = tab; await Task.Delay(20);
                             foreach (var button in Descendants(window).OfType<Button>().Where(b => b.Visible && b.Parent is FlowLayoutPanel))
@@ -131,10 +190,10 @@ internal static class Program
                         if (layerList.Height < 60) throw new Exception("Small window collapsed the layer list.");
                     }
                 }
-                Console.WriteLine("PASS: all 15 preferences sections, descriptor ownership, live skins, aspect-safe resizing, and unclipped controls at 8–13pt.");
+                Console.WriteLine("PASS: all 16 preferences sections, descriptor ownership, live skins, aspect-safe resizing, and unclipped controls at 8–13pt.");
             }
             catch (Exception ex) { failure = ex; }
-            finally { window.Close(); }
+            finally { await window.DrainLiveEdits(); window.SaveTo(Path.Combine(state, "last-check.stageflow")); window.Close(); }
         };
         try { Application.Run(window); }
         catch (Exception ex) { failure ??= ex; }

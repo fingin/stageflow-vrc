@@ -1,4 +1,21 @@
-# Validation log — v2 alpha.2
+# Validation log — v2 alpha.3
+
+## Alpha.3 follow-up (October 6, Pacific)
+
+Release build: zero warnings/errors; **29/29 core checks**. New checks cover OSC
+feedback state projection, inverse ranges, wire types, UDP delivery, periodic
+refresh, validation, backward-compatible defaults and project persistence.
+
+UI integration verifies OSC inside Preferences, explicit Add/Remove, inline
+enable, action defaults, custom addresses, undo/redo, close/reopen and local
+volume edits received over real UDP. All 16 Preferences sections and two workspace
+tabs pass the UI suite. Preview tests include 16:9, portrait and square canvases
+with a visible contrasting frame at different window sizes.
+
+OSC Pilot interaction itself remains a manual check; the automated receiver
+independently decodes the actual packets sent by the application. Engine/media
+paths did not change in alpha.3; performance measurements below are from alpha.2.
+
 
 ## Current v2 checks (2026-10-07 UTC)
 

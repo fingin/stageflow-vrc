@@ -49,6 +49,15 @@ MIDI/audio timing and a long production soak still require the actual show setup
 RTMP/SRT outputs require manual restart after a failed destination; receiver
 reconnect is automatic. NDI/OMT performance at 4K/multiple independent sources is
 not certified. LAN SDK paths require CPU frame transfers, unlike Spout/NVENC's GPU
-path. There is no per-output transcoding, HDR tone mapping, LTC, OSC feedback,
+path. There is no per-output transcoding, HDR tone mapping, LTC,
 ArtPollReply or multi-controller Art-Net merge. Runtime/license scope is documented
 in COMPATIBILITY.md and UPSTREAM.md.
+
+## Alpha.3 follow-up
+
+OSC feedback and the Preferences mapping editor are now implemented. The main
+workspace contains Inspector and Monitor only. Five new core checks bring the
+total to 29/29; UI checks additionally exercise actual local-edit UDP feedback,
+add/remove/undo, defaults and reopening. Preview framing now distinguishes the
+canvas from its workspace and checks portrait/square as well as landscape ratios.
+See OSC.md for configuration and semantics.

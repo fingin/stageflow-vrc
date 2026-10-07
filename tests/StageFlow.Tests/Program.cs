@@ -8,6 +8,11 @@ using StageFlow.Core.Osc;
 
 var tests = new (string Name, Action Body)[]
 {
+    ("OSC mapping defaults, unique addresses and feedback validation", OscFeedbackChecks.Defaults),
+    ("OSC feedback tracks local transport with deduplication and refresh", OscFeedbackChecks.Transport),
+    ("OSC feedback values, inverse ranges, targets and wire types", OscFeedbackChecks.Values),
+    ("OSC feedback sender delivers UDP and closes cleanly", OscFeedbackChecks.Udp),
+    ("OSC feedback project persistence and older v2 defaults", OscFeedbackChecks.Persistence),
     ("OSC wire types, strict padding and malformed packets", () =>
     {
         byte[] packet = OscCodec.Encode("/project/record", 1, 0.5f, true, false, "value", 12L, 0.75d);

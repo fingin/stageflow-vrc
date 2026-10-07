@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0-alpha.3 — 2026-10-06 (Pacific)
+
+- Move OSC entirely into Preferences, with separate connection and mapping sections.
+- Add actual-state UDP feedback, independent destination/enable settings, per-mapping
+  addresses/types/arguments, inverse fader scaling, change suppression and periodic resync.
+- Add explicit mapping Add/Remove, inline enable switches, unique addresses, appropriate
+  button/fader defaults, target-layer selection and a reset-defaults action.
+- Keep the black preview canvas visibly framed against a contrasting workspace;
+  preserve landscape, portrait and square aspect ratios during window resizing.
+- Add five core feedback checks and UI/UDP integration checks for local edits, mapping
+  lifecycle, persistence and preferences reopening. Release build: zero warnings/errors.
+
+
 ## 2.0.0-alpha.2 — 2026-10-07
 
 - Independent v2 branch, schema migration and isolated preferences/recovery; v1 frozen.

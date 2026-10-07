@@ -28,7 +28,7 @@ public sealed partial class MainWindow
         var show = Menu("Show"); show.DropDownItems.Add("Play / pause    Space", null, (_, _) => TogglePlay()); show.DropDownItems.Add("Stop", null, (_, _) => _engine?.Transport.Stop());
         show.DropDownItems.Add("Add marker    M", null, async (_, _) => await AddMarker()); show.DropDownItems.Add("Fit selected video", null, async (_, _) => await FitLayer());
         var routes = Menu("Connections"); foreach (string scope in new[] { "Audio", "Timecode", "Art-Net", "MIDI-DMX", "Outputs", "OSC" }) routes.DropDownItems.Add(scope, null, (_, _) => Inspect(scope));
-        routes.DropDownItems.Add("Refresh devices", null, (_, _) => PopulateRoutes()); routes.DropDownItems.Add("OSC mappings", null, (_, _) => _inspectorTabs.SelectedIndex = 2);
+        routes.DropDownItems.Add("Refresh devices", null, (_, _) => PopulateRoutes()); routes.DropDownItems.Add("OSC mappings", null, (_, _) => ShowPreferences("OSC mappings"));
         routes.DropDownItems.Add("Network destinations…", null, (_, _) => ShowNetworkOutputs());
         routes.DropDownItems.Add("NDI® information", null, (_, _) => OpenExternal("https://ndi.video/"));
         foreach (var protocol in Enum.GetValues<StageFlow.Core.Projects.NetworkSourceProtocol>())

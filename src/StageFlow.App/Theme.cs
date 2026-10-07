@@ -46,7 +46,7 @@ internal static class Theme
     public static TextBox TextBox(string text = "") => new() { Text = text, BackColor = Input, ForeColor = Text, BorderStyle = BorderStyle.FixedSingle, Width = 160 };
     public static void Apply(Control control, int textSize = 9)
     {
-        if (control is AspectPreviewHost) return; // Never recolor the GPU preview or its letterbox.
+        if (control is AspectPreviewHost) { control.BackColor = Background; control.Invalidate(); return; } // Keep the actual GPU canvas black; workspace around it is distinct.
         control.BackColor = control is Form or SplitContainer ? Background : Panel; control.ForeColor = Text;
         if (control.Font.Size < 16 && control.Font.Size != textSize) control.Font = new Font(control.Font.FontFamily, textSize, control.Font.Style);
         switch (control)
@@ -62,7 +62,9 @@ internal static class Theme
             case DataGridView grid:
                 grid.BackgroundColor = Panel; grid.GridColor = Border;
                 grid.DefaultCellStyle.BackColor = Panel; grid.DefaultCellStyle.ForeColor = Text; grid.DefaultCellStyle.SelectionBackColor = Selection; grid.DefaultCellStyle.SelectionForeColor = Text;
-                grid.ColumnHeadersDefaultCellStyle.BackColor = Input; grid.ColumnHeadersDefaultCellStyle.ForeColor = Muted; grid.EnableHeadersVisualStyles = false; return;
+                grid.ColumnHeadersDefaultCellStyle.BackColor = Input; grid.ColumnHeadersDefaultCellStyle.ForeColor = Muted;
+                grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Input; grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Text;
+                grid.EnableHeadersVisualStyles = false; return;
             case ToolStrip strip:
                 strip.Renderer = new DarkMenuRenderer(); strip.BackColor = Background;
                 foreach (ToolStripItem item in strip.Items) StyleMenuItem(item);

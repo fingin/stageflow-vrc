@@ -83,9 +83,10 @@ not been certified. Native runtime provenance and notices are included.
 Live input audio is optional per layer and feeds both local and program mixes.
 Inputs automatically retry disconnects. Failed RTMP/SRT destinations require a
 stream restart. There is no virtual camera, HLS/RTMP input picker, recording-to-file
-or external MIDI control mapper in v2 alpha.2. OSC diagnostic recording captures
+or external MIDI control mapper in v2 alpha.3. OSC diagnostic recording captures
 performance logs, not a movie.
 
 OSC listens on the configured UDP interface/port with exact-address mappings.
-No authentication, address wildcard matching or outbound feedback is implemented.
+Mapped state feedback is available with a configured destination IP/port. No
+authentication or address wildcard matching is implemented. See OSC.md.
 Project files contain destination URLs and any embedded stream keys in readable JSON.

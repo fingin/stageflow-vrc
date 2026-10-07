@@ -18,6 +18,7 @@ internal sealed class WorkspaceTabs : UserControl
     }
     public sealed class PageCollection(WorkspaceTabs owner)
     {
+        public int Count => owner._pages.Count;
         public void Add(Panel page)
         {
             int index = owner._pages.Count; owner._pages.Add(page);
@@ -61,8 +62,9 @@ internal sealed class AspectPreviewHost : Panel
     private Size _canvas = new(1920, 1080);
     public AspectPreviewHost(Control surface)
     {
-        Dock = DockStyle.Fill; BackColor = Color.Black; Margin = Padding.Empty;
-        _surface = surface; surface.Dock = DockStyle.None; surface.Margin = Padding.Empty; Controls.Add(surface);
+        DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw, true);
+        Dock = DockStyle.Fill; BackColor = Theme.Background; Margin = Padding.Empty; Padding = new Padding(12);
+        _surface = surface; surface.Dock = DockStyle.None; surface.Margin = Padding.Empty; surface.BackColor = Color.Black; Controls.Add(surface);
     }
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Size CanvasSize { get => _canvas; set { if (_canvas == value) return; _canvas = value; PerformLayout(); } }
@@ -73,7 +75,18 @@ internal sealed class AspectPreviewHost : Panel
         int width = Math.Max(1, (int)Math.Floor(canvas.Width * scale)), height = Math.Max(1, (int)Math.Floor(canvas.Height * scale));
         return new((available.Width - width) / 2, (available.Height - height) / 2, width, height);
     }
-    protected override void OnLayout(LayoutEventArgs e) { base.OnLayout(e); if (_surface != null) _surface.Bounds = Fit(ClientSize, _canvas); }
+    [System.ComponentModel.Browsable(false)]
+    public Rectangle ProgramBounds
+    {
+        get { var bounds = Fit(new Size(Math.Max(0, ClientSize.Width - Padding.Horizontal), Math.Max(0, ClientSize.Height - Padding.Vertical)), _canvas); bounds.Offset(Padding.Left, Padding.Top); return bounds; }
+    }
+    protected override void OnLayout(LayoutEventArgs e) { base.OnLayout(e); if (_surface != null) _surface.Bounds = ProgramBounds; Invalidate(); }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e); var bounds = ProgramBounds;
+        if (bounds.Width == 0 || bounds.Height == 0) return;
+        bounds.Inflate(1, 1); using var pen = new Pen(Theme.Muted); e.Graphics.DrawRectangle(pen, bounds);
+    }
 }
 
 internal sealed class ThemedComboBox : ComboBox

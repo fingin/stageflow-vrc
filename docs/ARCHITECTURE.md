@@ -112,3 +112,12 @@ Build/package scripts support a separate ArtifactsPath. Package refuses frozen v
 folders and records source revision/version. Native hashes are pinned in separate
 media/network manifests. Optional native library handles are cached for process
 lifetime; do not unload while any sender/receiver worker can call them.
+
+## Alpha.3 OSC feedback
+
+OscFeedbackProjector derives controller state from applied project and transport
+snapshots, applies inverse input scaling and typed output arguments, deduplicates
+changes and refreshes periodically. OscFeedbackSender owns a UDP socket and a
+one-state mailbox on a worker task. UI polling never waits for network sends.
+Feedback can run with command reception disabled. OSC mapping controls are created
+inside Preferences and disposed with that window; the runtime remains independent.

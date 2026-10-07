@@ -56,7 +56,7 @@ public sealed partial class MainWindow
         actions.Controls.Add(Theme.Button("Open logs", (_, _) => { Directory.CreateDirectory(_diagnosticFolder); OpenExternal(_diagnosticFolder); }));
         actions.Controls.Add(Theme.Button("Clear DMX", async (_, _) => await Guard(() => _engine!.BlackoutDmxAsync())));
         status.Controls.Add(_diagnostics); status.Controls.Add(actions); status.Controls.Add(_recordLabel); _inspectorTabs.TabPages.Add(status);
-        BuildOscPanel();
+        InitializeOsc();
     }
     private static void OpenExternal(string path) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
     private void Inspect(string scope) { if (!_scope.Items.Contains(scope)) { ShowPreferences(scope switch { "Outputs" => "Encoding", _ => scope }); return; } _scope.SelectedItem = scope; _inspectorTabs.SelectedIndex = 0; BindInspector(); }

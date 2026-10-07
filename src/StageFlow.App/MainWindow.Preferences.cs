@@ -7,7 +7,7 @@ public sealed partial class MainWindow
     private PropertyGrid? _preferencesGrid;
     private Label? _preferencesFeedback;
     private string _preferencesSection = "General";
-    internal static readonly string[] PreferenceSections = ["General", "Appearance", "Workspace", "Video & canvas", "Audio", "Timecode", "Art-Net", "MIDI-DMX", "Encoding", "HLS server", "Spout", "NDI & OMT", "RTMP & SRT", "OSC", "Diagnostics"];
+    internal static readonly string[] PreferenceSections = ["General", "Appearance", "Workspace", "Video & canvas", "Audio", "Timecode", "Art-Net", "MIDI-DMX", "Encoding", "HLS server", "Spout", "NDI & OMT", "RTMP & SRT", "OSC", "OSC mappings", "Diagnostics"];
     internal void ShowPreferences(string section = "General")
     {
         section = section switch { "Streaming" or "Outputs" => "Encoding", "Art-Net & MIDI" => "Art-Net", _ => section };
@@ -27,19 +27,33 @@ public sealed partial class MainWindow
         var heading = Theme.Label("Preferences"); heading.Font = new Font("Segoe UI", 18, FontStyle.Bold); heading.Dock = DockStyle.Top; heading.Height = 52; heading.AutoSize = false;
         var note = Theme.Label("", true); note.Dock = DockStyle.Bottom; note.Height = 55; note.AutoSize = false;
         var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 86, AutoScroll = true };
-        _preferencesGrid = CreatePropertyGrid();
+        _preferencesGrid = CreatePropertyGrid(); _preferencesGrid.Name = "PreferenceProperties";
+        var oscPanel = CreateOscMappingsPanel(); oscPanel.Visible = false;
         _preferencesFeedback = Theme.Label("Changes update automatically", true); _preferencesFeedback.Dock = DockStyle.Bottom; _preferencesFeedback.AutoSize = false; _preferencesFeedback.Height = 32;
         var search = Theme.TextBox(); search.Dock = DockStyle.Top; search.PlaceholderText = "Search all settings…"; search.AccessibleName = "Search all settings";
         void BindSection()
         {
             _preferencesSection = nav.SelectedItem?.ToString() ?? "General"; heading.Text = _preferencesSection;
+            _preferencesFeedback.Height = 32; _preferencesFeedback.Text = "Changes update automatically";
             bool local = _preferencesSection is "General" or "Appearance" or "Workspace" or "Diagnostics";
             note.Text = local ? "Personal preferences · saved automatically on this computer." : "Current show settings · update live and are stored with the show. Streaming changes restart the affected output.";
             foreach (Control old in actions.Controls.Cast<Control>().ToArray()) old.Dispose();
             _preferencesGrid.SelectedObject = string.IsNullOrWhiteSpace(search.Text) ? BuildPreferenceProperties(_preferencesSection) : SearchPreferences(search.Text);
+            bool mappingView = _preferencesSection == "OSC mappings" && string.IsNullOrWhiteSpace(search.Text);
+            _preferencesGrid.Visible = !mappingView; oscPanel.Visible = mappingView;
+            if (mappingView) { oscPanel.BringToFront(); BindOscMappings(); }
             if (!string.IsNullOrWhiteSpace(search.Text)) heading.Text = "Search results";
             if (_preferencesSection == "RTMP & SRT") actions.Controls.Add(Theme.Button("RTMP / SRT destinations…", (_, _) => ShowNetworkOutputs()));
-            if (_preferencesSection == "OSC") actions.Controls.Add(Theme.Button("Open control mappings", (_, _) => { _inspectorTabs.SelectedIndex = 2; Activate(); }));
+            if (_preferencesSection == "OSC")
+            {
+                actions.Controls.Add(Theme.Button("Control mappings", (_, _) => nav.SelectedItem = "OSC mappings"));
+                actions.Controls.Add(Theme.Button("Send current state", (_, _) =>
+                {
+                    if (_oscFeedback == null) _preferencesFeedback.Text = "Enable feedback and set the controller's IP/port first.";
+                    else { SendOscFeedback(true); UpdateOscStatus(); }
+                }));
+                actions.Controls.Add(Theme.Button("Reconnect OSC", async (_, _) => { await DrainLiveEdits(); _oscSettings = null; ConfigureOsc(_project.Osc); }));
+            }
             if (_preferencesSection is "Audio" or "Timecode" or "MIDI-DMX") actions.Controls.Add(Theme.Button("Refresh device list", (_, _) => { PopulateRoutes(); BindSection(); }));
             if (_preferencesSection == "General")
             { actions.Controls.Add(Theme.Button("Export preferences…", (_, _) => ExportPreferences())); actions.Controls.Add(Theme.Button("Import preferences…", (_, _) => { ImportPreferences(); BindSection(); })); }
@@ -51,11 +65,14 @@ public sealed partial class MainWindow
                 actions.Controls.Add(Theme.Button("Reconnect routes", async (_, _) => await ReconnectRoutes()));
                 actions.Controls.Add(Theme.Button("Reset counters", async (_, _) => await Guard(() => _engine!.ResetDiagnosticsAsync())));
             }
+            actions.Visible = !mappingView; note.Height = mappingView ? 48 : 55;
+            if (mappingView) note.Text = "Select a mapping to edit it below. Feedback uses the command address unless you set a separate return address.";
             Theme.Apply(dialog, _preferences.TextSize);
+            if (_preferencesSection == "OSC") UpdateOscStatus();
         }
         nav.SelectedIndexChanged += (_, _) => { search.Clear(); BindSection(); };
         search.TextChanged += (_, _) => BindSection();
-        body.Controls.Add(_preferencesGrid); body.Controls.Add(search); body.Controls.Add(heading); body.Controls.Add(actions); body.Controls.Add(note); body.Controls.Add(_preferencesFeedback);
+        body.Controls.Add(oscPanel); body.Controls.Add(_preferencesGrid); body.Controls.Add(search); body.Controls.Add(heading); body.Controls.Add(actions); body.Controls.Add(note); body.Controls.Add(_preferencesFeedback);
         dialog.Controls.Add(body); dialog.Controls.Add(nav);
         dialog.FormClosed += (_, _) => { _preferencesWindow = null; _preferencesGrid = null; _preferencesSections = null; _preferencesFeedback = null; };
         dialog.KeyPreview = true; dialog.KeyDown += (_, e) => { if (e.Control && e.KeyCode == Keys.F) { search.Focus(); search.SelectAll(); e.SuppressKeyPress = true; } else if (e.KeyCode == Keys.Escape && search.TextLength > 0) { search.Clear(); e.SuppressKeyPress = true; } };
@@ -90,7 +107,10 @@ public sealed partial class MainWindow
             case "RTMP & SRT":
                 bag.Add("Configured destinations", "Network streaming", typeof(int), () => WorkingProject.NetworkOutputs.Count, null, "Open destinations below to add, name, enable and configure each RTMP or SRT endpoint.");
                 bag.Add("Enabled destinations", "Network streaming", typeof(int), () => WorkingProject.NetworkOutputs.Count(o => o.Enabled), null, "Enabled destinations start with Start stream and share the video/audio encoding settings."); break;
-            case "OSC": AddRecord(bag, "OSC receiver", () => WorkingProject.Osc, (p,v) => QueueLive("Edit OSC", p with { Osc = v }), ["Mappings"]); break;
+            case "OSC":
+                AddRecord(bag, "01 · Receive commands", () => WorkingProject.Osc, (p,v) => QueueLive("Edit OSC", p with { Osc = v }), include: ["Enabled", "BindAddress", "Port"]);
+                AddRecord(bag, "02 · Send feedback", () => WorkingProject.Osc, (p,v) => QueueLive("Edit OSC feedback", p with { Osc = v }), include: ["FeedbackEnabled", "FeedbackHost", "FeedbackPort", "FeedbackIntervalMilliseconds", "FeedbackRefreshSeconds"]); break;
+            case "OSC mappings": bag.Add("Mappings", "OSC controls", typeof(int), () => WorkingProject.Osc.Mappings.Count, null, "Open OSC mappings to add, remove, learn and edit controls."); break;
         }
         return bag;
     }

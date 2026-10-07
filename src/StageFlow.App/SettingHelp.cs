@@ -4,6 +4,21 @@ internal static class SettingHelp
 {
     public static string Describe(Type type, string name) => name switch
     {
+        "Enabled" when type == typeof(StageFlow.Core.Osc.OscSettings) => "Receive OSC commands on the interface and port below. Feedback has its own enable switch.",
+        "Port" when type == typeof(StageFlow.Core.Osc.OscSettings) => "StageFlow command input port. Default 9000; set OSC Pilot's Send To Port to match.",
+        "FeedbackEnabled" when type == typeof(StageFlow.Core.Osc.OscSettings) => "Send actual app state to the configured controller, including changes made locally. Independent of command reception.",
+        "FeedbackEnabled" => "Include this mapping in feedback. The global feedback switch in Preferences → OSC must also be on.",
+        "FeedbackHost" => "IP address of the computer or tablet running OSC Pilot. Default 127.0.0.1 means this PC. Use the remote device's LAN IP when needed.",
+        "FeedbackPort" => "Controller receive port. Default 9001; set OSC Pilot's Listen On Port to match. Use a different local port from command input.",
+        "FeedbackIntervalMilliseconds" => "Maximum state update cadence, 20–2000 ms; default 100 ms (10 Hz). Only changed values are sent between refreshes. Video and MTC timing are independent.",
+        "FeedbackRefreshSeconds" => "Resend all mapped state every 1–60 seconds (default 2) so late/restarted controllers catch up over UDP.",
+        "FeedbackAddress" => "Leave empty to return state on this mapping's command address. Set another address for a separate indicator or a controller that echoes received values.",
+        "FeedbackFormat" => "Float32 is the default for OSC Pilot: buttons use 0/1 and faders a numeric value. Int32 and OSC Boolean are optional.",
+        "FeedbackArgument" => "Zero-based argument index for returned state (default 0). Earlier arguments are padded with float zeros.",
+        "Address" => "Exact OSC command address beginning with /. Custom names such as /project/record are allowed.",
+        "Trigger" => "Press: positive messages only. RisingEdge: once per press/release. EveryMessage: includes zero, for on/off setters. Value: maps input 0–1 into From/To and normalizes feedback back to 0–1.",
+        "Minimum" or "Maximum" when type == typeof(StageFlow.Core.Osc.OscMapping) => "Value-trigger control range. Inputs are normalized 0–1; feedback uses the inverse mapping. Reversed ranges work; the two endpoints must differ.",
+        "Argument" when type == typeof(StageFlow.Core.Osc.OscMapping) => "Zero-based incoming argument index (default 0).",
         "Width" or "Height" => type == typeof(ShowProject) ? "Output canvas size in pixels. Use even dimensions from 16 to 8192. This is independent of window size." : "Layer size in canvas pixels.",
         "X" or "Y" => "Position in output canvas pixels. Drag in the preview or enter an exact value.",
         "Opacity" => "Layer opacity from 0 (hidden) to 1 (fully visible). Keep data grids at 1.",
