@@ -3,6 +3,8 @@ using StageFlow.Core.Projects;
 using StageFlow.Core.Timing;
 using StageFlow.Engine.Audio;
 using StageFlow.Engine.Midi;
+using StageFlow.Engine.Spout;
+using StageFlow.Engine.Graphics;
 
 namespace StageFlow.App;
 
@@ -27,8 +29,14 @@ public sealed partial class MainWindow
     private readonly NumericUpDown _outputW = Number(16, 8192, 1920), _outputH = Number(16, 8192, 1080), _outputFps = Number(1, 120, 60),
         _bitrate = Number(500, 200000, 12000), _serverPort = Number(1, 65535, 8888);
     private readonly TextBox _serverBind = Theme.TextBox("0.0.0.0");
+    private readonly ComboBox _spoutInput = Combo(), _midiDmxOutput = Combo();
+    private readonly ComboBox _gpuChoice = Combo();
+    private readonly CheckBox _spoutOutputEnabled = Check("Publish composite as Spout"), _midiDmxEnabled = Check("Art-Net → MIDI-DMX"), _editorLog = Check("Use Unity Editor log");
+    private readonly TextBox _spoutName = Theme.TextBox("StageFlow Program"), _logPath = Theme.TextBox();
+    private readonly NumericUpDown _midiBudget = Number(3, 1000, 100), _midiIdle = Number(0, 1000, 10), _outputDen = Number(1, 1001, 1);
     private List<AudioDevice> _audioDevices = [];
     private readonly Label _layerHint = Theme.Label("Select a layer to edit", true);
+    private readonly Label _diagnostics = new() { AutoSize = false, Width = 238, Height = 290, ForeColor = Theme.Text };
 
     private static NumericUpDown Number(decimal min, decimal max, decimal initial = 0) => new()
     { Minimum = min, Maximum = max, Value = Math.Clamp(initial, min, max), Width = 130, BackColor = Theme.Input, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
@@ -55,6 +63,7 @@ public sealed partial class MainWindow
         Field(layer, "Clock label", _label); Field(layer, "Font family", _font); Field(layer, "Font size · pixels", _fontSize);
         Field(layer, "Text color · #AARRGGBB", _textColor); Field(layer, "Background · #AARRGGBB", _backgroundColor);
         Field(layer, "Grid encoding", _gridEncoding); Field(layer, "Grid orientation", _orientation); layer.Controls.Add(_gamma); layer.Controls.Add(_rgb); layer.Controls.Add(_maskZero);
+        Field(layer, "Spout source", _spoutInput);
         layer.Controls.Add(Theme.Button("Apply layer", async (_, _) => await ApplyLayer(), true));
         layer.Controls.Add(Theme.Button("Fit movie to canvas", async (_, _) => await FitLayer()));
         var routes = Tab("Routing");
@@ -65,17 +74,39 @@ public sealed partial class MainWindow
         Field(routes, "Audio offset · ms", _audioOffset); routes.Controls.Add(_artnetEnabled); Field(routes, "Art-Net bind IPv4", _artnetBind); Field(routes, "Art-Net port", _artnetPort);
         Field(routes, "First universe · zero-based", _firstUniverse); Field(routes, "Universe capacity", _universeCount); routes.Controls.Add(_autoUniverses);
         routes.Controls.Add(Theme.Button("Apply routing", async (_, _) => await ApplyRoutes(), true)); routes.Controls.Add(Theme.Button("Refresh devices", (_, _) => { PopulateRoutes(); BindRoutes(); }));
+        routes.Controls.Add(Theme.Label("GRIDNODE MIDI-DMX", true)); routes.Controls.Add(_midiDmxEnabled);
+        Field(routes, "MIDI-DMX output → gridnode", _midiDmxOutput); Field(routes, "Messages per world update", _midiBudget); Field(routes, "Idle channel refresh", _midiIdle);
+        routes.Controls.Add(_editorLog); Field(routes, "Log override · blank = automatic", _logPath);
+        routes.Controls.Add(Theme.Button("Apply MIDI-DMX", async (_, _) => await Edit("Change MIDI-DMX", _project with { MidiDmx = _project.MidiDmx with
+        { Enabled = _midiDmxEnabled.Checked, OutputDevice = _midiDmxOutput.SelectedIndex <= 0 ? null : (string)_midiDmxOutput.SelectedItem!,
+            ChannelsPerUpdate = (int)_midiBudget.Value, IdleScanChannels = (int)_midiIdle.Value, UseEditorLog = _editorLog.Checked,
+            LogPath = string.IsNullOrWhiteSpace(_logPath.Text) ? null : _logPath.Text } }), true));
         var output = Tab("Output");
-        Field(output, "Canvas width", _outputW); Field(output, "Canvas height", _outputH); Field(output, "Video FPS (MTC rate is separate)", _outputFps);
+        Field(output, "GPU · changing restarts playback", _gpuChoice);
+        _outputFps.Maximum = 120000;
+        Field(output, "Canvas width", _outputW); Field(output, "Canvas height", _outputH); Field(output, "FPS numerator · e.g. 60 or 30000", _outputFps); Field(output, "FPS denominator · e.g. 1 or 1001", _outputDen);
         Field(output, "Video bitrate · Kbps", _bitrate); Field(output, "HTTP bind address", _serverBind); Field(output, "HTTP port", _serverPort);
+        output.Controls.Add(_spoutOutputEnabled); Field(output, "Spout program name", _spoutName);
         output.Controls.Add(Theme.Label("Hardware H.264 + AAC\nHLS server runs inside StageFlow", true));
         output.Controls.Add(Theme.Button("Apply output", async (_, _) => await ApplyOutput(), true));
         output.Controls.Add(Theme.Button("Copy HLS URL", (_, _) => Clipboard.SetText($"http://127.0.0.1:{_project.Stream.Port}/live/index.m3u8")));
         output.Controls.Add(Theme.Button("Open player", (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"http://127.0.0.1:{_project.Stream.Port}/") { UseShellExecute = true })));
+        output.Controls.Add(Theme.Button("Save program frame…", async (_, _) => await SaveFrame()));
         output.Controls.Add(Theme.Label("SHORTCUTS\nSpace  Play / pause\n← / →  Frame step\nM  Add marker\nI / O  Loop in / out\nL  Toggle loop\nCtrl+S  Save show\nCtrl+Z / Ctrl+Y  Undo / redo\nF11  Full screen\n\nDrop a movie or show file to open it.", true));
+        var diagnostics = Tab("Status"); diagnostics.Controls.Add(_diagnostics);
+        _recordLabel.MaximumSize = new Size(235, 0);
+        diagnostics.Controls.Add(_recordLabel); diagnostics.Controls.Add(_recordButton);
+        _recordButton.Click += (_, _) => ToggleRecording();
+        diagnostics.Controls.Add(Theme.Button("Open diagnostic logs", (_, _) =>
+        { Directory.CreateDirectory(_diagnosticFolder); System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_diagnosticFolder) { UseShellExecute = true }); }));
+        diagnostics.Controls.Add(Theme.Button("Reconnect routes", async (_, _) => await Guard(() => _engine!.ReconnectRoutesAsync())));
+        diagnostics.Controls.Add(Theme.Button("Reset counters", async (_, _) => await Guard(() => _engine!.ResetDiagnosticsAsync())));
+        diagnostics.Controls.Add(Theme.Button("Clear received DMX", async (_, _) => await Guard(() => _engine!.BlackoutDmxAsync())));
+        diagnostics.Controls.Add(Theme.Label("MTC → grandMA2\ngrandMA2 Art-Net → grid / MIDI-DMX\nMovie audio → local output + HLS\n\nMIDI outputs start disarmed.\nArt-Net addresses are zero-based.\nSpout applications must share a GPU.", true));
     }
     private void BindInspector()
     {
+        _engine?.SelectLayer(_selected);
         _binding = true;
         if (SelectedLayer is { } layer)
         {
@@ -85,6 +116,7 @@ public sealed partial class MainWindow
             _width.Enabled = _height.Enabled = layer.Kind != LayerKind.Grid;
             Set(_cropL, layer.CropLeft); Set(_cropT, layer.CropTop); Set(_cropR, layer.CropRight); Set(_cropB, layer.CropBottom);
             _label.Text = layer.Label; _font.Text = layer.FontFamily; Set(_fontSize, layer.FontSize); _textColor.Text = layer.TextColor; _backgroundColor.Text = layer.BackgroundColor;
+            SelectDevice(_spoutInput, layer.SpoutSender);
             if (layer.Grid is { } grid) { _gridEncoding.SelectedItem = grid.Encoding.ToString(); _orientation.SelectedItem = grid.Orientation.ToString(); _gamma.Checked = grid.GammaCorrection; _rgb.Checked = grid.RgbPacking; _maskZero.Checked = grid.MaskZero; }
         }
         else _layerHint.Text = "Select a layer to edit";
@@ -100,6 +132,7 @@ public sealed partial class MainWindow
             Width = (double)_width.Value, Height = (double)_height.Value, Opacity = (double)_opacity.Value / 100,
             CropLeft = (int)_cropL.Value, CropTop = (int)_cropT.Value, CropRight = (int)_cropR.Value, CropBottom = (int)_cropB.Value,
             Label = _label.Text, FontFamily = _font.Text, FontSize = (int)_fontSize.Value, TextColor = _textColor.Text, BackgroundColor = _backgroundColor.Text,
+            SpoutSender = _spoutInput.SelectedIndex <= 0 ? null : (string)_spoutInput.SelectedItem!,
             Grid = layer.Grid is { } grid ? grid with { Encoding = Enum.Parse<GridEncoding>((string)_gridEncoding.SelectedItem!),
                 Orientation = Enum.Parse<GridOrientation>((string)_orientation.SelectedItem!), GammaCorrection = _gamma.Checked, RgbPacking = _rgb.Checked, MaskZero = _maskZero.Checked } : null
         };
@@ -108,12 +141,19 @@ public sealed partial class MainWindow
     private async Task FitLayer()
     {
         if (SelectedLayer is not { Kind: LayerKind.Video } layer) return;
-        await Edit("Fit video", _project with { Layers = _project.Layers.Select(l => l.Id == layer.Id ? l with { X = 0, Y = 0, Width = _project.Width, Height = _project.Height, CropLeft = 0, CropTop = 0, CropRight = 0, CropBottom = 0 } : l).ToList() });
+        var info = _engine?.MediaInfo;
+        double scale = info == null ? 1 : Math.Min((double)_project.Width / info.Width, (double)_project.Height / info.Height);
+        double width = info == null ? _project.Width : info.Width * scale, height = info == null ? _project.Height : info.Height * scale;
+        await Edit("Fit video", _project with { Layers = _project.Layers.Select(l => l.Id == layer.Id ? l with
+        { X = (_project.Width - width) / 2, Y = (_project.Height - height) / 2, Width = width, Height = height, CropLeft = 0, CropTop = 0, CropRight = 0, CropBottom = 0 } : l).ToList() });
     }
     private void PopulateRoutes()
     {
         _midiInput.Items.Clear(); _midiInput.Items.Add("(none)"); foreach (var device in MidiDevices.Inputs()) _midiInput.Items.Add(device.Name);
         _midiOutput.Items.Clear(); _midiOutput.Items.Add("(none)"); foreach (var device in MidiDevices.Outputs()) _midiOutput.Items.Add(device.Name);
+        _midiDmxOutput.Items.Clear(); _midiDmxOutput.Items.Add("(none)"); foreach (var device in MidiDevices.Outputs()) _midiDmxOutput.Items.Add(device.Name);
+        _spoutInput.Items.Clear(); _spoutInput.Items.Add("(none)"); foreach (var name in SpoutRegistry.Senders()) _spoutInput.Items.Add(name);
+        _gpuChoice.Items.Clear(); _gpuChoice.Items.Add("Automatic · most VRAM"); foreach (var name in GpuDevice.EnumerateAdapters().Select(a => a.Name).Distinct()) _gpuChoice.Items.Add(name);
         try { _audioDevices = LocalAudioOutput.Enumerate().ToList(); } catch { _audioDevices = []; }
         _audioDevice.Items.Clear(); _audioDevice.Items.Add("Default output"); foreach (var device in _audioDevices) _audioDevice.Items.Add(device.Name);
         BindRoutes();
@@ -135,8 +175,13 @@ public sealed partial class MainWindow
         _localMute.Checked = _project.Audio.LocalMute; _streamMute.Checked = _project.Audio.StreamMute;
         _artnetEnabled.Checked = _project.ArtNet.Enabled; _artnetBind.Text = _project.ArtNet.BindAddress; Set(_artnetPort, _project.ArtNet.Port);
         Set(_firstUniverse, _project.ArtNet.FirstUniverse); Set(_universeCount, _project.ArtNet.UniverseCount); _autoUniverses.Checked = _project.ArtNet.AutomaticUniverseCount;
-        Set(_outputW, _project.Width); Set(_outputH, _project.Height); Set(_outputFps, (double)_project.FpsNumerator / _project.FpsDenominator);
+        Set(_outputW, _project.Width); Set(_outputH, _project.Height); Set(_outputFps, _project.FpsNumerator); Set(_outputDen, _project.FpsDenominator);
         Set(_bitrate, _project.Stream.VideoBitrateKbps); Set(_serverPort, _project.Stream.Port); _serverBind.Text = _project.Stream.BindAddress;
+        _spoutOutputEnabled.Checked = _project.Spout.OutputEnabled; _spoutName.Text = _project.Spout.OutputName;
+        SelectDevice(_gpuChoice, _project.GpuAdapter);
+        _midiDmxEnabled.Checked = _project.MidiDmx.Enabled; SelectDevice(_midiDmxOutput, _project.MidiDmx.OutputDevice);
+        Set(_midiBudget, _project.MidiDmx.ChannelsPerUpdate); Set(_midiIdle, _project.MidiDmx.IdleScanChannels);
+        _editorLog.Checked = _project.MidiDmx.UseEditorLog; _logPath.Text = _project.MidiDmx.LogPath;
     }
     private async Task ApplyRoutes()
     {
@@ -155,6 +200,21 @@ public sealed partial class MainWindow
         });
     }
     private async Task ApplyOutput() => await Edit("Change output", _project with { Width = (int)_outputW.Value, Height = (int)_outputH.Value,
-        FpsNumerator = (int)_outputFps.Value, FpsDenominator = 1,
+        GpuAdapter = _gpuChoice.SelectedIndex <= 0 ? null : (string)_gpuChoice.SelectedItem!,
+        FpsNumerator = (int)_outputFps.Value, FpsDenominator = (int)_outputDen.Value,
+        Spout = _project.Spout with { OutputEnabled = _spoutOutputEnabled.Checked, OutputName = _spoutName.Text },
         Stream = _project.Stream with { BindAddress = _serverBind.Text, Port = (int)_serverPort.Value, VideoBitrateKbps = (int)_bitrate.Value } });
+    private async Task SaveFrame()
+    {
+        using var dialog = new SaveFileDialog { Filter = "PNG image|*.png", FileName = "StageFlow-frame.png" };
+        if (dialog.ShowDialog(this) == DialogResult.OK) await Guard(() => _engine!.SaveFrameAsync(dialog.FileName));
+    }
+    private async Task AddSpout()
+    {
+        var senders = SpoutRegistry.Senders();
+        string? name = Prompt("Spout sender name", senders.FirstOrDefault() ?? "HNode Output");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var layer = new Layer { Name = name, Kind = LayerKind.Spout, SpoutSender = name, Width = _project.Width, Height = _project.Height };
+        _selected = layer.Id; await Edit("Add Spout input", _project with { Layers = [.. _project.Layers, layer] });
+    }
 }

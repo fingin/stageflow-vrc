@@ -7,6 +7,62 @@ using StageFlow.Core.Timing;
 
 var tests = new (string Name, Action Body)[]
 {
+    ("grid masking hot path does not allocate per channel", () =>
+    {
+        var layout = new GridLayout { Masks = [new(10, 20)] };
+        for (int i = 0; i < 1000; i++) _ = layout.IsMasked(i);
+        long before = GC.GetAllocatedBytesForCurrentThread(); int matches = 0;
+        for (int update = 0; update < 60; update++)
+            for (int channel = 0; channel < 45 * 512; channel++) if (layout.IsMasked(channel)) matches++;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Equal(660, matches); Check(allocated < 4096);
+        Console.WriteLine($"  45 universes × 60 updates: {allocated} bytes allocated for masks");
+    }),
+    ("ArtSync commits universes together and expires safely", () =>
+    {
+        var store = new DmxUniverseStore(0, 2); byte[] snapshot = new byte[1024];
+        store.Apply(new ArtDmx(0, 0, 0, new byte[] { 10, 20 }), 1, 1, 300);
+        store.Synchronize(1, 2, 400);
+        store.Apply(new ArtDmx(0, 0, 0, new byte[] { 30, 40 }), 1, 3, 300);
+        store.Apply(new ArtDmx(1, 0, 0, new byte[] { 50, 60 }), 1, 4, 300);
+        store.CopyTo(snapshot, 5); Equal((byte)10, snapshot[0]); Equal((byte)0, snapshot[512]);
+        store.Synchronize(2, 6, 400); store.CopyTo(snapshot, 6); Equal((byte)10, snapshot[0]);
+        store.Synchronize(1, 7, 400); store.CopyTo(snapshot, 8); Equal((byte)30, snapshot[0]); Equal((byte)50, snapshot[512]);
+        store.Apply(new ArtDmx(0, 0, 0, new byte[] { 70, 80 }), 1, 9, 300);
+        store.CopyTo(snapshot, 408); Equal((byte)70, snapshot[0]);
+    }),
+    ("MIDI-DMX banked wire encoding and bounded fair refresh", () =>
+    {
+        foreach (int channel in Enumerable.Range(0, 16384))
+        foreach (byte value in new byte[] { 0, 1, 127, 128, 255 })
+        {
+            uint message = MidiDmxCodec.Channel(channel, value);
+            int decodedChannel = channel / 2048 * 2048 + ((message & 0xf0) == 0x80 ? 1024 : 0) + (int)(message & 15) * 64 + (int)((message >> 9) & 63);
+            int decodedValue = (int)((message >> 8) & 1) * 128 + (int)((message >> 16) & 127);
+            Equal(channel, decodedChannel); Equal((int)value, decodedValue);
+        }
+        byte[] desired = new byte[16384]; new Random(437).NextBytes(desired);
+        var seen = new bool[16384]; var scheduler = new MidiDmxScheduler(); uint[] messages = new uint[100]; int bank = 0;
+        for (int update = 0; update < 400; update++)
+        {
+            int count = scheduler.Build(desired, messages, 100, 10); Check(count <= 100);
+            for (int i = 0; i < count; i++)
+            {
+                uint m = messages[i];
+                if ((m & 255) == 0xbf) { int code = (int)((m >> 16) & 127); if (code < 8) bank = code; continue; }
+                int index = bank * 2048 + ((m & 0xf0) == 0x80 ? 1024 : 0) + (int)(m & 15) * 64 + (int)((m >> 9) & 63);
+                Equal((int)desired[index], (int)((m >> 8) & 1) * 128 + (int)((m >> 16) & 127)); seen[index] = true;
+            }
+        }
+        Check(seen.All(x => x));
+    }),
+    ("project rejects invalid styles and nonfinite settings", () =>
+    {
+        Throws<InvalidDataException>(() => new ShowProject { Layers = [new() { TextColor = "oops" }] }.Validate());
+        Throws<InvalidDataException>(() => new ShowProject { Audio = new() { LocalVolume = float.NaN } }.Validate());
+        Throws<InvalidDataException>(() => new ShowProject { Stream = new() { SegmentSeconds = double.NaN } }.Validate());
+        Throws<InvalidDataException>(() => new ShowProject { Layers = [new() { Kind = LayerKind.Grid }] }.Validate());
+    }),
     ("timecode rates and day wrap", () =>
     {
         foreach (var rate in Enum.GetValues<MtcRate>())

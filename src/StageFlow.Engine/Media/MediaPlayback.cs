@@ -23,13 +23,20 @@ public sealed class MediaPlayback : IDisposable
         new BoundedChannelOptions(8) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
     private readonly Thread _videoThread, _audioThread;
     private readonly PcmTimelineBuffer _pcm = new(96000);
+    private sealed record LoopAudio(long Start, int Offset, float[] Samples);
+    private LoopAudio? _loopAudio;
+    private readonly TaskCompletionSource _videoReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _audioReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task Ready { get; }
     private string? _error;
     public MediaInfo Info { get; }
     public string? Error => Volatile.Read(ref _error);
     public long AudioUnderruns => _pcm.Underruns;
+    public volatile int AudioOffsetMilliseconds;
     public MediaPlayback(GpuDevice gpu, Transport transport, MediaInfo info)
     {
         _gpu = gpu; _transport = transport; Info = info;
+        Ready = Task.WhenAll(_videoReady.Task, _audioReady.Task);
         _videoThread = new Thread(VideoLoop) { IsBackground = true, Name = "StageFlow video decode" };
         _audioThread = new Thread(AudioLoop) { IsBackground = true, Name = "StageFlow audio decode" };
         _videoThread.Start(); _audioThread.Start();
@@ -48,7 +55,8 @@ public sealed class MediaPlayback : IDisposable
                 var snapshot = _transport.Snapshot();
                 if (snapshot.TimelineRevision != revision)
                 {
-                    revision = snapshot.TimelineRevision; seekPosition = snapshot.Position;
+                    revision = snapshot.TimelineRevision;
+                    seekPosition = TimeSpan.FromSeconds(Math.Clamp(snapshot.Position.TotalSeconds, 0, Math.Max(0, Info.Duration.TotalSeconds - frameSeconds * 0.5)));
                     decoder.Seek(seekPosition); ended = sentPaused = false;
                 }
                 if (ended || (snapshot.State != TransportState.Playing && sentPaused)) { Wait(5); continue; }
@@ -63,37 +71,56 @@ public sealed class MediaPlayback : IDisposable
                 var queued = new QueuedVideoFrame((nint)clone, decoder.Position, revision);
                 try { _video.Writer.WriteAsync(queued, _cancel.Token).AsTask().GetAwaiter().GetResult(); }
                 catch { queued.Dispose(); throw; }
+                _videoReady.TrySetResult();
                 sentPaused = true;
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Volatile.Write(ref _error, ex.Message); }
-        finally { _video.Writer.TryComplete(); }
+        catch (OperationCanceledException) { _videoReady.TrySetCanceled(); }
+        catch (Exception ex) { Volatile.Write(ref _error, ex.Message); _videoReady.TrySetException(ex); }
+        finally { _video.Writer.TryComplete(); _videoReady.TrySetCanceled(); }
     }
     private void AudioLoop()
     {
-        if (Info.AudioCodec == null) return;
+        if (Info.AudioCodec == null) { _audioReady.TrySetResult(); return; }
         try
         {
             using var decoder = new AudioDecoder(Info.Path);
+            using var loopDecoder = new AudioDecoder(Info.Path);
             float[] samples = new float[2048];
-            long revision = -1, cursor = 0;
+            long revision = -1, cursor = 0; int oldOffset = int.MinValue;
             while (!_cancel.IsCancellationRequested)
             {
                 var snapshot = _transport.Snapshot();
-                long position = (long)(snapshot.Position.TotalSeconds * 48000);
-                if (snapshot.TimelineRevision != revision)
+                int offset = AudioOffsetMilliseconds;
+                long position = Math.Max(0, (long)(snapshot.Position.TotalSeconds * 48000) + offset * 48L);
+                if (snapshot.TimelineRevision != revision || oldOffset != offset || position > cursor + 48000)
                 {
-                    revision = snapshot.TimelineRevision; cursor = position;
+                    oldOffset = offset; revision = snapshot.TimelineRevision; cursor = position;
                     decoder.Seek(position); _pcm.Reset(revision, position);
                 }
-                if (cursor > position + 24000) { Wait(3); continue; }
+                if (cursor > position + 24000)
+                {
+                    _audioReady.TrySetResult();
+                    // Prime the loop head while normal playback has half a second queued.
+                    // This immutable, bounded cache bridges the decoder's seek at wraparound.
+                    long loopStart = snapshot.LoopIn.Ticks * 48000 / TimeSpan.TicksPerSecond;
+                    var cached = Volatile.Read(ref _loopAudio);
+                    if (snapshot.LoopEnabled && (cached == null || cached.Start != loopStart || cached.Offset != offset))
+                    {
+                        float[] head = new float[48000];
+                        loopDecoder.Seek(Math.Max(0, loopStart + offset * 48L));
+                        loopDecoder.ReadAt(loopStart + offset * 48L, head);
+                        Volatile.Write(ref _loopAudio, new(loopStart, offset, head));
+                    }
+                    Wait(3); continue;
+                }
                 decoder.ReadAt(cursor, samples);
                 _pcm.Write(revision, cursor, samples); cursor += samples.Length / 2;
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Volatile.Write(ref _error, ex.Message); }
+        catch (OperationCanceledException) { _audioReady.TrySetCanceled(); }
+        catch (Exception ex) { Volatile.Write(ref _error, ex.Message); _audioReady.TrySetException(ex); }
+        finally { _audioReady.TrySetCanceled(); }
     }
     private void Wait(int milliseconds) => _cancel.Token.WaitHandle.WaitOne(milliseconds);
     public bool TryGetVideo(TransportSnapshot snapshot, out QueuedVideoFrame frame)
@@ -112,7 +139,23 @@ public sealed class MediaPlayback : IDisposable
     public void ReadAudio(TransportSnapshot snapshot, Span<float> stereo, int offsetMilliseconds = 0)
     {
         if (snapshot.State != TransportState.Playing || Info.AudioCodec == null) { stereo.Clear(); return; }
-        _pcm.Read(snapshot.TimelineRevision, (long)(snapshot.Position.TotalSeconds * 48000) + offsetMilliseconds * 48L, stereo);
+        long start = snapshot.Position.Ticks * 48000 / TimeSpan.TicksPerSecond;
+        long loopStart = snapshot.LoopIn.Ticks * 48000 / TimeSpan.TicksPerSecond;
+        long loopEnd = snapshot.LoopOut.Ticks * 48000 / TimeSpan.TicksPerSecond;
+        var cache = Volatile.Read(ref _loopAudio);
+        while (!stereo.IsEmpty)
+        {
+            bool looping = snapshot.Mode == ClockMode.Internal && snapshot.LoopEnabled && loopEnd > loopStart;
+            if (looping && start >= loopEnd) start = loopStart + (start - loopStart) % (loopEnd - loopStart);
+            int frames = stereo.Length / 2;
+            if (looping) frames = (int)Math.Min(frames, loopEnd - start);
+            var chunk = stereo[..(frames * 2)];
+            if (looping && cache != null && cache.Start == loopStart && cache.Offset == offsetMilliseconds &&
+                start >= cache.Start && start + frames <= cache.Start + cache.Samples.Length / 2)
+                cache.Samples.AsSpan((int)(start - cache.Start) * 2, chunk.Length).CopyTo(chunk);
+            else _pcm.Read(snapshot.TimelineRevision, start + offsetMilliseconds * 48L, chunk);
+            stereo = stereo[chunk.Length..]; start += frames;
+        }
     }
     public void Dispose()
     {

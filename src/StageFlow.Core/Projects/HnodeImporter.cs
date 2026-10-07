@@ -62,7 +62,8 @@ public static class HnodeImporter
             {
                 if (item is YamlMappingNode exporter && exporter.Tag.ToString() == "!MIDIDMX")
                     midi = new() { Enabled = true, OutputDevice = Text(exporter, "midiDevice", "loopMIDI Port"),
-                        ChannelsPerUpdate = Integer(exporter, "channelsPerUpdate", 100), IdleScanChannels = Integer(exporter, "idleScanChannels", 10) };
+                        ChannelsPerUpdate = Integer(exporter, "channelsPerUpdate", 100), IdleScanChannels = Integer(exporter, "idleScanChannels", 10),
+                        UseEditorLog = Boolean(exporter, "useEditorLog", false) };
                 else notices.Add($"Exporter {item.Tag} was preserved in the original YAML but is not active.");
             }
         if (Boolean(root, "transcode", false))

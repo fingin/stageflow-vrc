@@ -55,7 +55,16 @@ public sealed class ArtNetReceiver : IAsyncDisposable
             sender.Address.TryWriteBytes(address, out _);
             _store.Apply(packet, BinaryPrimitives.ReadUInt32BigEndian(address), Stopwatch.GetTimestamp(), Stopwatch.Frequency * 3);
         }
-        else if (!ArtNetPacket.TryGetOpcode(bytes, out _)) Interlocked.Increment(ref _invalid);
+        else if (ArtNetPacket.TryGetOpcode(bytes, out ushort opcode))
+        {
+            if (opcode == ArtNetPacket.OpSync && bytes.Length >= 14 && BinaryPrimitives.ReadUInt16BigEndian(bytes[10..]) >= 14)
+            {
+                Span<byte> address = stackalloc byte[4]; sender.Address.TryWriteBytes(address, out _);
+                _store.Synchronize(BinaryPrimitives.ReadUInt32BigEndian(address), Stopwatch.GetTimestamp(), Stopwatch.Frequency * 4);
+            }
+            else if (opcode == ArtNetPacket.OpDmx || opcode == ArtNetPacket.OpSync) Interlocked.Increment(ref _invalid);
+        }
+        else Interlocked.Increment(ref _invalid);
     }
     public async ValueTask DisposeAsync()
     {

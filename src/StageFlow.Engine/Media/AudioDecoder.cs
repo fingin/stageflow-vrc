@@ -115,8 +115,12 @@ public sealed unsafe class AudioDecoder : IDisposable
     }
     public void Seek(long sample)
     {
-        long time = ffmpeg.av_rescale_q(sample, new AVRational { num = 1, den = 48000 }, _timeBase) + _startTime;
-        FFmpegRuntime.Check(ffmpeg.av_seek_frame(_format, _stream, time, ffmpeg.AVSEEK_FLAG_BACKWARD), "Seek audio");
+        // AAC/MP3 overlap and resampling state need preroll after a seek. Decode
+        // from 100 ms earlier, then ReadAt trims by timestamps to the exact sample.
+        long time = ffmpeg.av_rescale_q(sample - 4800, new AVRational { num = 1, den = 48000 }, _timeBase) + _startTime;
+        int result = ffmpeg.av_seek_frame(_format, _stream, time, ffmpeg.AVSEEK_FLAG_BACKWARD);
+        if (result < 0 && sample < 4800) result = ffmpeg.av_seek_frame(_format, _stream, _startTime, ffmpeg.AVSEEK_FLAG_BACKWARD);
+        FFmpegRuntime.Check(result, "Seek audio");
         ffmpeg.avcodec_flush_buffers(_codec); ffmpeg.av_frame_unref(_frame); ffmpeg.av_packet_unref(_packet);
         ffmpeg.swr_close(_resampler); FFmpegRuntime.Check(ffmpeg.swr_init(_resampler), "Reset audio resampler");
         _draining = _resamplerDrained = false; _sampleCount = 0; _nextFrame = StartSample = sample;

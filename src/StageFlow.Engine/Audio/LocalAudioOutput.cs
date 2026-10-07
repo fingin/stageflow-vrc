@@ -15,6 +15,8 @@ public sealed class LocalAudioOutput : IDisposable
     private readonly VolumeSampleProvider _gain;
     private readonly byte[] _scratch = new byte[65536];
     private long _overruns;
+    private string? _error;
+    public string? Error => Volatile.Read(ref _error);
     public long Overruns => Interlocked.Read(ref _overruns);
     public TimeSpan BufferedDuration => _buffer.BufferedDuration;
     public float Volume { get => _gain.Volume; set => _gain.Volume = Math.Clamp(value, 0, 2); }
@@ -34,6 +36,7 @@ public sealed class LocalAudioOutput : IDisposable
         { BufferDuration = TimeSpan.FromMilliseconds(250), DiscardOnBufferOverflow = false, ReadFully = true };
         _gain = new VolumeSampleProvider(_buffer.ToSampleProvider());
         _output = new WasapiOut(_device, AudioClientShareMode.Shared, true, latencyMilliseconds);
+        _output.PlaybackStopped += (_, e) => { if (e.Exception != null) Volatile.Write(ref _error, e.Exception.Message); };
         try { _output.Init(_gain); _output.Play(); }
         catch { _output.Dispose(); _device.Dispose(); throw; }
     }

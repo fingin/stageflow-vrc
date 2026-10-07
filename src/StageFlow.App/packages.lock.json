@@ -145,7 +145,7 @@
         "dependencies": {
           "FFmpeg.AutoGen": "[8.0.0.1, )",
           "NAudio": "[2.2.1, )",
-          "StageFlow.Core": "[0.1.0-alpha.1, )",
+          "StageFlow.Core": "[0.1.0-alpha.2, )",
           "Vortice.D3DCompiler": "[3.8.3, )",
           "Vortice.Direct2D1": "[3.8.3, )",
           "Vortice.Direct3D11": "[3.8.3, )"

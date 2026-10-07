@@ -7,10 +7,23 @@ using StageFlow.Engine.Media;
 using StageFlow.Engine.Streaming;
 using StageFlow.Core.Projects;
 
+string nativeDirectory = Environment.GetEnvironmentVariable("STAGEFLOW_NATIVE") ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../runtime"));
+
+if (args.Length == 1 && args[0] == "--runtime-info")
+{
+    FFmpegRuntime.Initialize(nativeDirectory);
+    Console.WriteLine(FFmpegRuntime.Version);
+    Console.WriteLine(FFmpeg.AutoGen.ffmpeg.avcodec_license());
+    Console.WriteLine(FFmpeg.AutoGen.ffmpeg.avcodec_configuration());
+    return;
+}
+
 foreach (var adapter in GpuDevice.EnumerateAdapters()) Console.WriteLine($"GPU {adapter.Index}: {adapter.Name}, {adapter.DedicatedBytes / 1024 / 1024} MiB");
 foreach (var midi in MidiDevices.Outputs()) Console.WriteLine($"MIDI OUT {midi.Id}: {midi.Name}");
 foreach (var midi in MidiDevices.Inputs()) Console.WriteLine($"MIDI IN {midi.Id}: {midi.Name}");
 using var gpu = new GpuDevice();
+SpoutChecks.Run(gpu, args);
+GridChecks.Run(gpu);
 using var surface = new GpuSurface(gpu, 2560, 1440);
 using var renderer = new GridRenderer(gpu);
 byte[] channels = new byte[3 * 512]; new Random(1733).NextBytes(channels);
@@ -56,7 +69,7 @@ if (args.Length == 2 && args[0] == "--grid-image")
 
 if (args.Length == 2 && args[0] == "--media")
 {
-    FFmpegRuntime.Initialize(@"C:\Program Files\obs-studio\bin\64bit");
+    FFmpegRuntime.Initialize(nativeDirectory);
     Console.WriteLine($"Native FFmpeg: {FFmpegRuntime.Version}");
     Console.WriteLine(MediaProbe.Read(args[1]));
     using var decoder = new GpuVideoDecoder(gpu, args[1]);
@@ -118,4 +131,23 @@ if (args.Length == 2 && args[0] == "--media")
     while (decoder.Read() && decoder.Position < TimeSpan.FromSeconds(2)) { }
     if (Math.Abs(decoder.Position.TotalSeconds - 2) > 0.04) throw new Exception("Seek did not reach target");
     Console.WriteLine($"PASS {decoded} GPU frames decoded without CPU transfer; seek reached {decoder.Position}");
+    var transport = new StageFlow.Core.Timing.Transport();
+    transport.Load(TimeSpan.FromSeconds(5)); transport.SetLoop(true, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+    using var playback = new MediaPlayback(gpu, transport, MediaProbe.Read(args[1]));
+    playback.Ready.WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+    // Give the bounded loop-head prefetch a chance to run, then locate near the tail.
+    Thread.Sleep(100); transport.Seek(TimeSpan.FromSeconds(4.9)); Thread.Sleep(100);
+    float[] wrapped = new float[3200], expected = new float[3200];
+    var snapshot = transport.Snapshot() with { Position = TimeSpan.FromSeconds(4.99), State = StageFlow.Core.Timing.TransportState.Playing };
+    playback.ReadAudio(snapshot, wrapped);
+    using var referenceAudio = new AudioDecoder(args[1]);
+    float[] entireAudio = new float[480000]; referenceAudio.ReadAt(0, entireAudio);
+    entireAudio.AsSpan(239520 * 2, 960).CopyTo(expected); entireAudio.AsSpan(0, 2240).CopyTo(expected.AsSpan(960));
+    double maxDifference = wrapped.Zip(expected, (a, b) => Math.Abs(a - b)).Max();
+    if (maxDifference > 0.00001 || playback.AudioUnderruns != 0)
+    {
+        int worst = Enumerable.Range(0, wrapped.Length).MaxBy(i => Math.Abs(wrapped[i] - expected[i]));
+        throw new Exception($"Loop audio mismatch {maxDifference} at sample {worst / 2}: {wrapped[worst]} vs {expected[worst]}; underruns {playback.AudioUnderruns}");
+    }
+    Console.WriteLine("PASS sample-accurate audio buffer across movie loop boundary, with no underrun");
 }

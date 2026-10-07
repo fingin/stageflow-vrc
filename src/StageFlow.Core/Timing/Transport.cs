@@ -121,14 +121,17 @@ public sealed class Transport(IMonotonicClock? clock = null)
         }
     }
     public void Step(int frames)
+    { lock (_gate) Step(frames, _rate.Numerator(), _rate.Denominator()); }
+    public void Step(int frames, int fpsNumerator, int fpsDenominator)
     {
+        if (fpsNumerator <= 0 || fpsDenominator <= 0) throw new ArgumentOutOfRangeException(nameof(fpsNumerator));
         lock (_gate)
         {
             if (_mode != ClockMode.Internal) return;
-            long frame = _rate.ToFrames(TimeSpan.FromTicks(NowPosition(_clock.Ticks)));
+            long frame = (long)((Int128)NowPosition(_clock.Ticks) * fpsNumerator / (TimeSpan.TicksPerSecond * (long)fpsDenominator));
             // Ceiling a frame boundary prevents 29.97/24 fps integer tick truncation stepping back a frame.
-            Int128 n = (Int128)(frame + frames) * TimeSpan.TicksPerSecond * _rate.Denominator();
-            long ticks = checked((long)((n + _rate.Numerator() - 1) / _rate.Numerator()));
+            Int128 n = (Int128)(frame + frames) * TimeSpan.TicksPerSecond * fpsDenominator;
+            long ticks = checked((long)((n + fpsNumerator - 1) / fpsNumerator));
             _positionTicks = Math.Clamp(ticks, 0, _durationTicks);
             _state = TransportState.Paused; _anchor = _clock.Ticks; _revision++; _timelineRevision++;
         }

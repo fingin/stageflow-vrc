@@ -1,6 +1,7 @@
 # StageFlow delivery contract
 
-Status: implementation in progress. This document is not a claim of completed features.
+Status: runnable alpha.3 delivered for user stress testing. Final performance and
+external show validation remain open; this is not a completion claim for the goal.
 
 ## User workflows
 
@@ -36,14 +37,21 @@ Status: implementation in progress. This document is not a claim of completed fe
 
 ## Implementation checkpoints
 
-- [ ] Core transport, MTC encode/decode, project persistence and protocol tests.
-- [ ] Art-Net reception, node discovery, compatible grid rendering, MIDI-DMX.
-- [ ] GPU device, video/audio playback and compositor.
-- [ ] MTC Windows device input/output and synchronization.
-- [ ] In-process hardware encoding, HLS muxing, HTTP server and player page.
-- [ ] Optional Spout texture I/O.
-- [ ] Complete desktop workflows and diagnostics.
-- [ ] End-to-end decode tests, sustained performance tests and packaged app.
+- [x] Core transport, MTC codecs, project persistence and protocol tests.
+- [x] ArtDmx/ArtSync reception, compatible grid rendering and MIDI-DMX implementation.
+- [x] GPU device, video/audio playback and compositor.
+- [x] Windows MTC input/output implementation and synchronization logic.
+- [x] In-process encoding, HLS muxing, HTTP server and browser player.
+- [x] Optional Spout texture I/O.
+- [x] Desktop transport/layer/project workflows and diagnostic recording.
+- [x] End-to-end media checks and self-contained portable package.
+- [ ] User GUI stress review and optimization of the full dynamic workload.
+- [ ] Actual grandMA2, MIDI-DMX target world and physical audio validation.
+
+ArtPoll advertisement, multi-controller DMX merging and unused Hnode transcoding/
+generator modes are outside this alpha's implemented compatibility scope. See
+COMPATIBILITY.md. Latest stress evidence and unfinished performance gate are in
+VALIDATION.md. Diagnostic sessions can be summarized with scripts/analyze-performance.ps1.
 
 ## Current environment
 

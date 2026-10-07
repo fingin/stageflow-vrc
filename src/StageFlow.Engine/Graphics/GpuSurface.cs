@@ -18,7 +18,7 @@ public sealed class GpuSurface : IDisposable
             Width = (uint)width, Height = (uint)height, MipLevels = 1, ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm, SampleDescription = SampleDescription.Default,
             BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-            MiscFlags = shared ? ResourceOptionFlags.Shared : ResourceOptionFlags.None
+            MiscFlags = shared ? ResourceOptionFlags.SharedKeyedMutex : ResourceOptionFlags.None
         });
         Target = gpu.Device.CreateRenderTargetView(Texture);
         View = gpu.Device.CreateShaderResourceView(Texture);

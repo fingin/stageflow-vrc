@@ -21,7 +21,11 @@ public sealed record GridLayout
     public List<ChannelRange> Masks { get; init; } = [];
     public bool IsMasked(int channel)
     {
-        bool match = Masks.Any(range => range.Contains(channel));
+        bool match = false;
+        // Called once per channel per grid update. Avoid a capturing LINQ predicate
+        // here: a 45-universe/60 Hz show otherwise allocates over a million closures/s.
+        for (int i = 0; i < Masks.Count; i++)
+            if (Masks[i].Contains(channel)) { match = true; break; }
         return InvertMask ? !match : match;
     }
     public void Validate()
@@ -31,7 +35,7 @@ public sealed record GridLayout
         if (FirstUniverse < 0 || UniverseCount is < 1 or > 512 || FirstUniverse + UniverseCount > 32768)
             throw new ArgumentException("Invalid grid universe range.");
         if (!Enum.IsDefined(Encoding) || !Enum.IsDefined(Orientation)) throw new ArgumentException("Unknown grid format.");
-        if (Masks.Any(x => x.Start < 0 || x.End < x.Start)) throw new ArgumentException("Invalid channel mask.");
+        if (Masks == null || Masks.Any(x => x.Start < 0 || x.End < x.Start)) throw new ArgumentException("Invalid channel mask.");
     }
 }
 

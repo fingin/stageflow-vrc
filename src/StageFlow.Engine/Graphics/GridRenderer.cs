@@ -21,6 +21,8 @@ public sealed class GridRenderer : IDisposable
     private readonly ID3D11BlendState _blend;
     private readonly ID3D11RasterizerState _raster;
     private readonly uint[] _upload;
+    private readonly uint[] _mask;
+    private GridLayout? _maskLayout;
     private readonly int _capacity;
     [StructLayout(LayoutKind.Sequential)]
     private struct GridConstants
@@ -97,6 +99,7 @@ public sealed class GridRenderer : IDisposable
     {
         _gpu = gpu; _capacity = maxUniverses * 512;
         _upload = new uint[_capacity + (_capacity + 5) / 6];
+        _mask = new uint[_capacity];
         var vs = Compiler.Compile(Shader, "VS", "Grid.hlsl", "vs_5_0", ShaderFlags.OptimizationLevel3);
         var ps = Compiler.Compile(Shader, "PS", "Grid.hlsl", "ps_5_0", ShaderFlags.OptimizationLevel3);
         _vertex = gpu.Device.CreateVertexShader(vs.Span); _pixel = gpu.Device.CreatePixelShader(ps.Span);
@@ -114,10 +117,16 @@ public sealed class GridRenderer : IDisposable
     {
         int count = Math.Min(channels.Length, layout.UniverseCount * 512);
         if (count > _capacity) throw new ArgumentException("GPU grid capacity exceeded.");
-        for (int i = 0; i < count; i++) _upload[i] = (uint)(channels[i] | (layout.IsMasked(i) ? 256 : 0));
+        if (!ReferenceEquals(_maskLayout, layout))
+        {
+            for (int i = 0; i < _capacity; i++) _mask[i] = layout.IsMasked(i) ? 256u : 0;
+            _maskLayout = layout;
+        }
+        for (int i = 0; i < count; i++) _upload[i] = channels[i] | _mask[i];
         Span<byte> group = stackalloc byte[6];
-        for (int i = 0; i < count; i += 6)
-        { group.Clear(); channels.Slice(i, Math.Min(count - i, 6)).CopyTo(group); _upload[count + i / 6] = GridEncoder.Crc4(group); }
+        if (layout.Encoding == GridEncoding.BinaryStageFlight)
+            for (int i = 0; i < count; i += 6)
+            { group.Clear(); channels.Slice(i, Math.Min(count - i, 6)).CopyTo(group); _upload[count + i / 6] = GridEncoder.Crc4(group); }
         var map = _gpu.Context.Map(_values, 0, MapMode.WriteDiscard);
         _upload.AsSpan(0, count + (count + 5) / 6).CopyTo(map.AsSpan<uint>(_upload.Length));
         _gpu.Context.Unmap(_values, 0);

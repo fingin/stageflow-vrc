@@ -1,0 +1,46 @@
+{
+  "release": "2026-08-26",
+  "archiveUrl": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip",
+  "archiveSha256": "EB5E67AD110543BCB65A4612BCD654B6427972EA70D26412B48D7E21532DFE67",
+  "recipeCommit": "f80e1d30181b0ff2b048b6d8fe8b8c501f3d221c",
+  "ffmpegVersion": "8.1.2",
+  "ffmpegCommit": "38b88335f99e76ed89ff3c93f877fdefce736c13",
+  "files": [
+    {
+      "name": "avcodec-62.dll",
+      "sha256": "96E906FBF0CD9049234FEF7A8D30EF3F6CDD898794DAD4EBAB78452546CFDA2A"
+    },
+    {
+      "name": "avformat-62.dll",
+      "sha256": "D6CDDEAABAABE27301EF4440F6C64B8CE88DB37203A3DB51EC52BAFF475711BF"
+    },
+    {
+      "name": "avutil-60.dll",
+      "sha256": "A75E48D829EFAB5CF8368E81063665EB1A625AE2724CB05B0762E6DAF8D003AE"
+    },
+    {
+      "name": "swresample-6.dll",
+      "sha256": "8165A0DF3643F48AA2C327F80CADAD281D3372F115DCC63DF5D3C0C22AE6D063"
+    },
+    {
+      "name": "swscale-9.dll",
+      "sha256": "D9DC15EF7862D702664BEDC99B5AF3CBBF6BEF3B5360138326865B3CD911C39E"
+    },
+    {
+      "name": "libx264-164.dll",
+      "sha256": "E1003815F14AB4DBEC78366212BE3F6DBA4251B9F8442393A5E8E035B222620D"
+    },
+    {
+      "name": "librist.dll",
+      "sha256": "2583A465D8F6D0B2760A819E2973CA29B4908FB5B98B3D8848F89D5D624E9F6C"
+    },
+    {
+      "name": "srt.dll",
+      "sha256": "4AD6176A0FB8BC77A627EB32C1B0B82BE65D4F01873ADD4E262451C7501EFBC4"
+    },
+    {
+      "name": "zlib.dll",
+      "sha256": "D3141E12F549F63AB4855351001E50CA1DC8018D16289D736D3577C9A1FC1352"
+    }
+  ]
+}

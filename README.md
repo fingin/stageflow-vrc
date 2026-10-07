@@ -1,53 +1,87 @@
-# StageFlow
+# StageFlow 0.1.0-alpha.3
 
-Single-process Windows show playback, timecode, Art-Net gridnode rendering and HLS streaming.
+Windows show playback, master/follower MIDI timecode, Art-Net gridnode overlays,
+GPU compositing, Spout and live HLS in one application process.
 
-**In development — not a finished release.** See [delivery contract](docs/DELIVERY.md).
+Open **StageFlow.App.exe** in the portable folder. No .NET installation, OBS,
+MediaMTX, Hnode, VidPlayMTC, separate MTC sender, or FFmpeg executable is used at
+runtime. Native libraries and the browser player ship beside the application.
+Windows 10/11 x64, Direct3D 11 and an NVIDIA GPU with H.264 NVENC are required for
+this build. Tested on this computer's RTX 4080. Existing Windows MIDI ports,
+including loopMIDI ports, remain selectable; StageFlow does not install a driver.
 
-The user workflow is MP4 + grandMA2 Art-Net → synchronized picture, gridnode data,
-audio and timecode → an in-process HLS stream. MTC can be generated or received.
-Spout is optional interoperability, not the primary Art-Net transport.
+This is a working **alpha**, with automated hardware and streaming checks. Actual
+grandMA2 and VRChat/gridnode show validation remains to be performed. See
+[validation](docs/VALIDATION.md) for measured results and exact limits.
 
-## Build
+## Start a show
 
-Windows x64 and .NET SDK 10.0.401. The workspace's local SDK is automatically
-located by the build script; a system SDK also works.
+1. Open a movie. Its audio feeds the selected local output and independently HLS.
+2. Import the Hnode `.shwcfg`, or open `samples/Sample Show.stageflow`. The supplied
+   configuration imports as BinaryStageFlight at 2560×1440/60. Loading a movie afterward
+   preserves the imported grid layout.
+3. In **Routing**, choose the MTC output for grandMA2, enable **Send master MTC**, and
+   apply. Select local audio, volumes and timing offsets in the same tab.
+4. Turn **MIDI outputs: ON** when ready to drive configured outputs. MTC goes to
+   grandMA2; grandMA2's Art-Net drives the grid. MIDI-DMX has a separate route.
+5. Add/duplicate clocks, arrange them in the preview, then **Start stream**.
+   **Output → Open player** opens the built-in HLS viewer.
+
+The supplied Art-Net bind is `127.0.0.1:6454`. Only one application can own that
+endpoint: close Hnode's receiver when transferring that job to StageFlow. For
+another machine, choose the local network interface or `0.0.0.0` and send ArtDmx to
+this PC. Universe addresses are zero-based.
+
+Default player: `http://127.0.0.1:8888/`. Playlist: `/live/index.m3u8`. Other computers
+use this PC's LAN address and configured port. The server is HTTP on the selected
+interfaces, without login or TLS. No firewall or router setting is changed.
+
+## Controls
+
+- Space: play/pause. Left/right: one source-video frame. Stop returns to the start.
+- Drag the timeline or enter `HH:MM:SS:FF` in Go to. Rate and show-start offset
+  determine displayed MTC; 29.97 drop-frame uses `HH:MM:SS;FF`.
+- M: add marker; double-click to locate. Right-click to rename/remove.
+  Ctrl+Up/Down: previous/next marker.
+- I/O: loop in/out; L: toggle loop. The range must be positive and fit the movie.
+- Drag unlocked layers to move them; use the lower-right handle to resize. Shift
+  snaps movement to eight pixels. Grid dimensions are protected in the inspector.
+- Ctrl+S: save, Ctrl+Shift+S: save as, Ctrl+O: movie, Ctrl+Shift+O: show, Ctrl+N: new.
+- Ctrl+Z/Y: undo/redo. F11: full screen. Drop a movie, show or Hnode file to open it.
+
+Clocks share master timecode, with independent position, label, font, size,
+colors, opacity, visibility and layer order. There is no small fixed clock count;
+project size and GPU capacity are the practical limits.
+
+Projects are readable, versioned JSON (`.stageflow`), with relative media paths,
+atomic saves and a previous-file `.bak`. Recovery autosaves run every 30 seconds.
+**Show** includes recent projects. **Status** exposes timing, missed deadlines,
+audio underruns and route errors, with reconnect/reset controls.
+
+For stress testing, use `Start Stress Test.cmd` in the portable folder. It loads
+the supplied Sample layout and enables diagnostic recording. The bottom bar shows
+REC. Logs remain in `diagnostics/`, readable while the app is running. You can
+also toggle recording in Status. The source includes `scripts/analyze-performance.ps1`
+to summarize a saved JSONL log.
+
+## Build and modify
+
+Use Windows x64 and .NET SDK 10.0.401 or a compatible .NET 10 SDK:
 
 ```powershell
+.\scripts\prepare-native.ps1
 .\scripts\build.ps1 -Test -EngineTest
+.\scripts\package.ps1
 ```
 
-The GPU test requires Direct3D 11 hardware. The media integration test currently
-loads FFmpeg 8 ABI DLLs from the installed OBS directory only as a development
-fixture. The delivered application will package its own native libraries and
-will not require OBS or run an OBS/FFmpeg/MediaMTX process.
+Native preparation downloads a pinned, SHA-256 checked OBS dependency release;
+only DLLs are copied. No OBS program is included or launched. Portable publishing
+bundles .NET and ASP.NET. On another PC the Microsoft Visual C++ x64 runtime may
+also be required. Versions and provenance are in `native-manifest.json` and `licenses/`.
 
-## Source map
+See [architecture](docs/ARCHITECTURE.md), [compatibility](docs/COMPATIBILITY.md),
+[validation](docs/VALIDATION.md) and [upstream attribution](docs/UPSTREAM.md).
 
-- `src/StageFlow.Core`: transport, MTC codec, Art-Net, Hnode import, grid layouts,
-  projects and undo/redo. Independent of the GUI and GPU.
-- `src/StageFlow.Engine`: native Direct3D/FFmpeg pipeline, Windows MIDI and audio,
-  in-memory HLS segmentation and the in-process HTTP server.
-- `tests/StageFlow.Tests`: deterministic protocol, transport and project tests.
-- `tests/StageFlow.EngineTests`: hardware integration and encoded-grid checks.
-- `web`: self-hosted HLS player, including pinned hls.js 1.6.13.
-
-Actual work lives in this source tree. Generated binaries are ignored by Git.
-Dependencies are pinned and restore lock files are checked in. Avoid coupling
-the rendering loop to UI timers, native I/O callbacks, or HTTP clients.
-
-## Validation to date
-
-Core checks pass, including the user's actual Hnode configuration import.
-On an RTX 4080: D3D11 hardware decode, GPU conversion/compositing, BinaryStageFlight
-grid rendering, NVENC video and AAC audio into in-memory MPEG-TS/HLS segments.
-Independent FFmpeg decoding confirms both streams and preservation of 13,312
-binary/CRC cells in the current integration fixture. This is not yet a sustained
-performance result or external grandMA2/VRChat compatibility certification.
-
-## Upstream
-
-See [upstream notes](docs/UPSTREAM.md) and `licenses/`. Media/graphics calls are
-bound through [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) and
-[FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen), with native execution
-in Direct3D and FFmpeg. Hnode-compatible grid layouts retain upstream attribution.
+StageFlow source is GPL-3.0-or-later; see `LICENSE`. Third-party components retain
+their own notices. Source, lock files, build scripts, native build recipes and
+source references accompany the portable app.

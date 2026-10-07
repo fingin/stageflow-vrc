@@ -11,7 +11,7 @@ internal static class Theme
     public static readonly Color Border = Color.FromArgb(45, 59, 77);
     public static Button Button(string text, EventHandler? click = null, bool primary = false)
     {
-        var button = new Button { Text = text, AutoSize = true, Height = 34, Padding = new Padding(10, 4, 10, 4),
+        var button = new Button { Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(34, 34), Height = 34, Padding = new Padding(10, 4, 10, 4),
             FlatStyle = FlatStyle.Flat, BackColor = primary ? Accent : Input, ForeColor = primary ? Background : Text,
             Cursor = Cursors.Hand, Margin = new Padding(3), Font = new Font("Segoe UI", 9) };
         button.FlatAppearance.BorderColor = Border;

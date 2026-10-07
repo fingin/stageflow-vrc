@@ -19,6 +19,7 @@ public sealed record ShowProject
     public ArtNetSettings ArtNet { get; init; } = new();
     public StreamSettings Stream { get; init; } = new();
     public MidiDmxSettings MidiDmx { get; init; } = new();
+    public SpoutSettings Spout { get; init; } = new();
     public List<Layer> Layers { get; init; } = [];
     public List<Marker> Markers { get; init; } = [];
     public long LoopInTicks { get; init; }
@@ -28,29 +29,57 @@ public sealed record ShowProject
 
     public void Validate()
     {
+        if (Clock == null || Audio == null || ArtNet == null || Stream == null || MidiDmx == null || Spout == null || Layers == null || Markers == null)
+            throw new InvalidDataException("Project is missing required settings.");
+        if (string.IsNullOrWhiteSpace(Name) || Name.Length > 256) throw new InvalidDataException("Show name requires 1–256 characters.");
         if (SchemaVersion != CurrentSchema) throw new InvalidDataException($"Unsupported project schema {SchemaVersion}.");
         if (Width is < 16 or > 8192 || Height is < 16 or > 8192 || (Width & 1) != 0 || (Height & 1) != 0)
             throw new InvalidDataException("Canvas must have even dimensions between 16 and 8192.");
         if (FpsNumerator is < 1 or > 120000 || FpsDenominator is < 1 or > 1001 ||
             (double)FpsNumerator / FpsDenominator is < 1 or > 240) throw new InvalidDataException("Invalid output frame rate.");
         if (!Enum.IsDefined(Clock.Mode) || !Enum.IsDefined(Clock.Rate)) throw new InvalidDataException("Invalid timecode settings.");
-        if (ArtNet.Port is < 1 or > 65535 || !System.Net.IPAddress.TryParse(ArtNet.BindAddress, out _))
+        if (ArtNet.Port is < 1 or > 65535 || !System.Net.IPAddress.TryParse(ArtNet.BindAddress, out var bind) || bind.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
             throw new InvalidDataException("Invalid Art-Net bind address or port.");
         if (ArtNet.FirstUniverse < 0 || ArtNet.UniverseCount is < 1 or > 512 || ArtNet.FirstUniverse + ArtNet.UniverseCount > 32768)
             throw new InvalidDataException("Invalid Art-Net universe range.");
-        if (Stream.Port is < 1 or > 65535 || Stream.VideoBitrateKbps is < 500 or > 200000 ||
-            Stream.SegmentSeconds is < 0.5 or > 10) throw new InvalidDataException("Invalid streaming settings.");
+        if (Stream.Port is < 1 or > 65535 || Stream.VideoBitrateKbps is < 500 or > 200000 || Stream.AudioBitrateKbps is < 32 or > 512 ||
+            !double.IsFinite(Stream.SegmentSeconds) || Stream.SegmentSeconds is < 0.5 or > 10 || Stream.PlaylistSegments is < 3 or > 20 ||
+            !System.Net.IPAddress.TryParse(Stream.BindAddress, out _) || Stream.Encoder != "h264_nvenc") throw new InvalidDataException("Invalid streaming settings. This build uses NVIDIA H.264 hardware encoding.");
+        if (!float.IsFinite(Audio.LocalVolume) || !float.IsFinite(Audio.StreamVolume) || Audio.LocalVolume is < 0 or > 2 || Audio.StreamVolume is < 0 or > 2 ||
+            Audio.OffsetMilliseconds is < -5000 or > 5000 || Clock.OutputOffsetMilliseconds is < -5000 or > 5000 || Math.Abs((double)Clock.OffsetFrames) > 2592000)
+            throw new InvalidDataException("Invalid audio gain or timing offset.");
+        if (MidiDmx.ChannelsPerUpdate is < 3 or > 1000 || MidiDmx.IdleScanChannels is < 0 or > 1000)
+            throw new InvalidDataException("MIDI-DMX message budget must be 3–1000 and idle scan 0–1000.");
+        if (string.IsNullOrWhiteSpace(Spout.OutputName) || Spout.OutputName.Length > 200 || Spout.OutputName.Any(c => c < 32 || c > 126 || c == '\\'))
+            throw new InvalidDataException("Use a Spout name of 1–200 plain characters without backslashes.");
+        if (LoopInTicks < 0 || LoopOutTicks < 0 || (LoopEnabled && LoopOutTicks <= LoopInTicks)) throw new InvalidDataException("Invalid loop range.");
         if (Layers.Count > 10000 || Markers.Count > 100000) throw new InvalidDataException("Project exceeds supported data size.");
+        if (Layers.Any(l => l == null)) throw new InvalidDataException("Missing layer.");
         if (Layers.Select(l => l.Id).Distinct().Count() != Layers.Count) throw new InvalidDataException("Duplicate layer IDs.");
         foreach (var layer in Layers)
         {
+            if (layer == null) throw new InvalidDataException("Missing layer.");
             if (!Enum.IsDefined(layer.Kind) || !double.IsFinite(layer.X) || !double.IsFinite(layer.Y) ||
                 !double.IsFinite(layer.Width) || !double.IsFinite(layer.Height) || layer.Width <= 0 || layer.Height <= 0 ||
                 !double.IsFinite(layer.Opacity) || layer.Opacity is < 0 or > 1)
                 throw new InvalidDataException("Invalid layer transform.");
+            if (Math.Abs(layer.X) > 65536 || Math.Abs(layer.Y) > 65536 || layer.Width > 65536 || layer.Height > 65536 ||
+                layer.CropLeft is < 0 or > 16384 || layer.CropTop is < 0 or > 16384 || layer.CropRight is < 0 or > 16384 || layer.CropBottom is < 0 or > 16384)
+                throw new InvalidDataException("Layer bounds or crop are outside the supported range.");
+            if (layer.FontSize is < 8 or > 256 || string.IsNullOrWhiteSpace(layer.FontFamily) || layer.FontFamily.Length > 128 ||
+                layer.Label == null || layer.Label.Length > 256 || layer.Name == null || layer.Name.Length > 256 || !ValidColor(layer.TextColor) || !ValidColor(layer.BackgroundColor))
+                throw new InvalidDataException("Invalid text style. Colors use #RRGGBB or #AARRGGBB; labels allow 256 characters.");
+            if (layer.Kind == LayerKind.Grid && layer.Grid == null) throw new InvalidDataException("Grid layer requires a layout.");
+            if (layer.Kind == LayerKind.Spout && (string.IsNullOrWhiteSpace(layer.SpoutSender) || layer.SpoutSender.Length > 255 || layer.SpoutSender.Contains('\\')))
+                throw new InvalidDataException("Select a valid Spout sender.");
             layer.Grid?.Validate();
         }
+        foreach (var marker in Markers)
+            if (marker == null || marker.PositionTicks < 0 || marker.Name == null || marker.Name.Length > 256 || !ValidColor(marker.Color))
+                throw new InvalidDataException("Invalid marker.");
     }
+    private static bool ValidColor(string? color) => color != null && (color.Length == 7 || color.Length == 9) && color[0] == '#' &&
+        uint.TryParse(color.AsSpan(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out _);
 }
 public sealed record ClockSettings
 {
@@ -88,6 +117,13 @@ public sealed record MidiDmxSettings
     public string? OutputDevice { get; init; }
     public int ChannelsPerUpdate { get; init; } = 100;
     public int IdleScanChannels { get; init; } = 10;
+    public bool UseEditorLog { get; init; }
+    public string? LogPath { get; init; }
+}
+public sealed record SpoutSettings
+{
+    public bool OutputEnabled { get; init; }
+    public string OutputName { get; init; } = "StageFlow Program";
 }
 public sealed record StreamSettings
 {

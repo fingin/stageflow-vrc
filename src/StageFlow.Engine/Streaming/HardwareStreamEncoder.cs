@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using FFmpeg.AutoGen;
 using StageFlow.Core.Projects;
 using StageFlow.Engine.Graphics;
@@ -17,9 +18,13 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     private AVFrame* _videoFrame, _audioFrame;
     private AVPacket* _packet;
     private TsSegmentMuxer? _muxer;
+    private GpuEncoderConverter? _converter;
     private long _videoPts, _audioPts;
     private int _audioFilled;
     private bool _completed;
+    private readonly double[] _timings = new double[5];
+    private long _submitted;
+    public string TimingSummary => string.Join("/", _timings.Select(t => (t / Math.Max(1, _submitted)).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)));
     public long VideoFrames => _videoPts;
     public long AudioSamples => _audioPts;
     public HardwareStreamEncoder(GpuDevice gpu, HlsSegmentStore store, int width, int height, int fpsNum, int fpsDen, StreamSettings settings)
@@ -42,7 +47,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _video->colorspace = AVColorSpace.AVCOL_SPC_BT709;
             _video->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
             _video->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
-            // NVENC's BGRA input conversion produces standard limited-range H.264.
+            // The D3D11 video processor supplies limited-range BT.709 NV12.
             _video->color_range = AVColorRange.AVCOL_RANGE_MPEG;
             _device = ffmpeg.av_hwdevice_ctx_alloc(AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA);
             if (_device == null) throw new OutOfMemoryException();
@@ -52,9 +57,12 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _frames = ffmpeg.av_hwframe_ctx_alloc(_device);
             if (_frames == null) throw new OutOfMemoryException();
             var frameContext = (AVHWFramesContext*)_frames->data;
-            frameContext->format = AVPixelFormat.AV_PIX_FMT_D3D11; frameContext->sw_format = AVPixelFormat.AV_PIX_FMT_BGRA;
+            frameContext->format = AVPixelFormat.AV_PIX_FMT_D3D11; frameContext->sw_format = AVPixelFormat.AV_PIX_FMT_NV12;
             frameContext->width = width; frameContext->height = height; frameContext->initial_pool_size = 0;
+            // AVD3D11VAFramesContext.BindFlags follows its texture pointer in the public ABI.
+            *(uint*)((byte*)frameContext->hwctx + IntPtr.Size) = (uint)Vortice.Direct3D11.BindFlags.RenderTarget;
             FFmpegRuntime.Check(ffmpeg.av_hwframe_ctx_init(_frames), "Create GPU encoder frame pool");
+            _converter = new(gpu, width, height, fpsNum, fpsDen);
             _video->hw_frames_ctx = ffmpeg.av_buffer_ref(_frames);
             AVDictionary* options = null;
             ffmpeg.av_dict_set(&options, "preset", "p3", 0);
@@ -83,23 +91,33 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
         }
         catch { Dispose(); throw; }
     }
-    public void SubmitVideo(GpuSurface surface)
+    public void SubmitVideo(GpuSurface surface, long? presentationFrame = null)
     {
+        long time = Stopwatch.GetTimestamp();
         if (_completed) throw new InvalidOperationException("Encoder is completed.");
         if (surface.Width != _video->width || surface.Height != _video->height) throw new ArgumentException("Encoder texture dimensions differ.");
         ffmpeg.av_frame_unref(_videoFrame);
         FFmpegRuntime.Check(ffmpeg.av_hwframe_get_buffer(_frames, _videoFrame, 0), "Acquire GPU encoder surface");
+        Profile(0, ref time);
         nint pointer = (nint)_videoFrame->data[0]; Marshal.AddRef(pointer);
         using (var destination = new ID3D11Texture2D(pointer))
-            _gpu.Context.CopySubresourceRegion(destination, (uint)(nint)_videoFrame->data[1], 0, 0, 0, surface.Texture, 0);
+            _converter!.Convert(surface.Texture, destination);
         _gpu.Context.Flush();
-        _videoFrame->pts = _videoPts++;
+        Profile(1, ref time);
+        long pts = presentationFrame ?? _videoPts;
+        if (pts < _videoPts) throw new ArgumentException("Video timestamps must increase.");
+        bool key = pts == 0 || pts / _video->gop_size > Math.Max(0, _videoPts - 1) / _video->gop_size;
+        _videoFrame->pts = pts; _videoPts = pts + 1;
+        _videoFrame->pict_type = key ? AVPictureType.AV_PICTURE_TYPE_I : AVPictureType.AV_PICTURE_TYPE_NONE;
         _videoFrame->color_range = _video->color_range; _videoFrame->colorspace = _video->colorspace;
         FFmpegRuntime.Check(ffmpeg.avcodec_send_frame(_video, _videoFrame), "Submit video to encoder");
+        Profile(2, ref time);
         DrainVideo();
+        Profile(3, ref time); _submitted++;
     }
     public void SubmitAudio(ReadOnlySpan<float> interleavedStereo, float gain = 1)
     {
+        long time = Stopwatch.GetTimestamp();
         if ((interleavedStereo.Length & 1) != 0) throw new ArgumentException("Stereo samples must be paired.");
         if (_completed) throw new InvalidOperationException("Encoder is completed.");
         for (int i = 0; i < interleavedStereo.Length; i += 2)
@@ -109,7 +127,10 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             ((float*)_audioFrame->data[1])[_audioFilled++] = Math.Clamp(interleavedStereo[i + 1] * gain, -1, 1);
             if (_audioFilled == _audio->frame_size) SendAudioFrame();
         }
+        Profile(4, ref time);
     }
+    private void Profile(int index, ref long start)
+    { long now = Stopwatch.GetTimestamp(); _timings[index] += (now - start) * 1000.0 / Stopwatch.Frequency; start = now; }
     private void SendAudioFrame()
     {
         _audioFrame->pts = _audioPts; _audioPts += _audioFrame->nb_samples;
@@ -151,6 +172,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     public void Dispose()
     {
         _muxer?.Dispose(); _muxer = null;
+        _converter?.Dispose(); _converter = null;
         var vf = _videoFrame; _videoFrame = null; if (vf != null) ffmpeg.av_frame_free(&vf);
         var af = _audioFrame; _audioFrame = null; if (af != null) ffmpeg.av_frame_free(&af);
         var p = _packet; _packet = null; if (p != null) ffmpeg.av_packet_free(&p);

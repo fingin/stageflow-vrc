@@ -13,6 +13,11 @@ public sealed partial class MainWindow : Form
     private EditHistory<ShowProject> _history;
     private ShowEngine? _engine;
     private readonly string[] _args;
+    private readonly bool _recordOnStartup;
+    private PerformanceRecorder? _recorder;
+    private readonly string _diagnosticFolder = Path.Combine(AppContext.BaseDirectory, "diagnostics");
+    private readonly Button _recordButton = Theme.Button("Start performance recording");
+    private readonly Label _recordLabel = Theme.Label("Performance recording is off", true);
     private string? _projectPath;
     private bool _dirty, _binding, _scrubbing, _resumeAfterScrub, _midiArmed;
     private Guid? _selected;
@@ -34,6 +39,9 @@ public sealed partial class MainWindow : Form
     private readonly System.Windows.Forms.Timer _autosave = new() { Interval = 30000 };
     private readonly ToolTip _tips = new();
     private Layer? _dragLayer;
+    private Layer? _pendingDrag;
+    private bool _dragResize;
+    private long _lastDrag;
     private PointF _dragStart;
     private bool _fullscreen;
     private Rectangle _restoredBounds;
@@ -41,8 +49,8 @@ public sealed partial class MainWindow : Form
 
     public MainWindow(string[] args)
     {
-        _args = args; _history = new(_project);
-        Text = "StageFlow 0.1.0-alpha.1"; Size = new Size(1500, 940); MinimumSize = new Size(1100, 720);
+        _recordOnStartup = args.Contains("--record"); _args = args.Where(a => a != "--record").ToArray(); _history = new(_project);
+        Text = "StageFlow " + Program.DisplayVersion; Size = new Size(1500, 940); MinimumSize = new Size(1180, 800);
         StartPosition = FormStartPosition.CenterScreen; BackColor = Theme.Background; ForeColor = Theme.Text;
         Font = new Font("Segoe UI", 9); KeyPreview = true; AllowDrop = true;
         BuildLayout(); BuildInspector(); RefreshProjectUi();
@@ -52,9 +60,22 @@ public sealed partial class MainWindow : Form
         _layers.SelectedIndexChanged += (_, _) => { if (!_binding) { _selected = (_layers.SelectedItem as LayerItem)?.Layer.Id; BindInspector(); } };
         _layers.DrawItem += DrawLayerItem;
         _markers.DoubleClick += (_, _) => JumpToSelectedMarker();
+        var markerMenu = new ContextMenuStrip();
+        markerMenu.Items.Add("Go to marker", null, (_, _) => JumpToSelectedMarker());
+        markerMenu.Items.Add("Rename marker…", null, async (_, _) => await RenameMarker());
+        markerMenu.Items.Add("Previous marker   Ctrl+↑", null, (_, _) => JumpMarker(-1));
+        markerMenu.Items.Add("Next marker   Ctrl+↓", null, (_, _) => JumpMarker(1));
+        markerMenu.Items.Add("Remove marker", null, async (_, _) => await RemoveMarker());
+        _markers.ContextMenuStrip = markerMenu;
         _play.Click += (_, _) => TogglePlay();
         _stream.Click += async (_, _) => await Guard(async () => { if (_engine!.Status.Streaming) await _engine.StopStreamAsync(); else await _engine.StartStreamAsync(); });
-        _arm.Click += async (_, _) => await Guard(async () => { _midiArmed = !_midiArmed; await _engine!.SetMidiArmedAsync(_midiArmed); _arm.Text = _midiArmed ? "MIDI outputs: ON" : "MIDI outputs: off"; });
+        _arm.Click += async (_, _) => await Guard(async () =>
+        {
+            bool arm = !_midiArmed;
+            try { await _engine!.SetMidiArmedAsync(arm); _midiArmed = arm; }
+            catch { _midiArmed = false; throw; }
+            finally { _arm.Text = _midiArmed ? "MIDI outputs: ON" : "MIDI outputs: off"; }
+        });
         _timeline.MouseDown += (_, _) => { if (_engine == null) return; _scrubbing = true; _resumeAfterScrub = _engine.Transport.Snapshot().State == TransportState.Playing; _engine.SetScrubbing(true); _engine.Transport.Pause(); };
         _timeline.Scroll += (_, _) => { if (Environment.TickCount64 - _lastScrub > 45) { SeekFromSlider(); _lastScrub = Environment.TickCount64; } };
         _timeline.MouseUp += (_, _) => { SeekFromSlider(); _scrubbing = false; _engine?.SetScrubbing(false); if (_resumeAfterScrub) _engine?.Transport.Play(); };
@@ -71,31 +92,32 @@ public sealed partial class MainWindow : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12), BackColor = Theme.Background };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 146)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 186)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         Controls.Add(root);
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, BackColor = Theme.Background };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 310));
         var branding = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         branding.Controls.Add(new Label { Text = "STAGEFLOW", Font = new Font("Segoe UI", 17, FontStyle.Bold), ForeColor = Theme.Text, AutoSize = true });
-        branding.Controls.Add(Theme.Label("SHOW CONTROL  ·  0.1.0 alpha", true)); header.Controls.Add(branding, 0, 0);
+        branding.Controls.Add(Theme.Label("SHOW CONTROL  ·  " + Program.DisplayVersion, true)); header.Controls.Add(branding, 0, 0);
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 9, 0, 0) };
         toolbar.Controls.Add(Theme.Button("Open movie…", async (_, _) => await OpenMovie()));
-        toolbar.Controls.Add(Theme.Button("Open show…", async (_, _) => await OpenProject()));
+        toolbar.Controls.Add(Theme.Button("Show ▾", (sender, _) => ShowFileMenu((Control)sender!)));
         toolbar.Controls.Add(Theme.Button("Import Hnode…", async (_, _) => await ImportHnode()));
         toolbar.Controls.Add(Theme.Button("Save", (_, _) => SaveProject()));
         header.Controls.Add(toolbar, 1, 0);
-        var outputs = new FlowLayoutPanel { AutoSize = true, Padding = new Padding(0, 9, 0, 0) }; outputs.Controls.Add(_arm); outputs.Controls.Add(_stream); header.Controls.Add(outputs, 2, 0);
+        var outputs = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 9, 0, 0) }; outputs.Controls.Add(_arm); outputs.Controls.Add(_stream); header.Controls.Add(outputs, 2, 0);
         root.Controls.Add(header, 0, 0);
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 225)); body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 285));
         var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1, BackColor = Theme.Panel, Padding = new Padding(10) };
         left.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 85)); left.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); left.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 126)); left.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 95)); left.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         left.Controls.Add(Theme.Label("LAYERS  ·  topmost first"), 0, 0); left.Controls.Add(_layers, 0, 1);
         var layerTools = new FlowLayoutPanel { Dock = DockStyle.Fill };
         layerTools.Controls.Add(Theme.Button("+ Clock", async (_, _) => await AddClock()));
         layerTools.Controls.Add(Theme.Button("+ Grid", async (_, _) => await AddGrid()));
+        layerTools.Controls.Add(Theme.Button("+ Spout", async (_, _) => await AddSpout()));
         layerTools.Controls.Add(Theme.Button("Copy", async (_, _) => await DuplicateLayer()));
         layerTools.Controls.Add(Theme.Button("↑", async (_, _) => await MoveLayer(1)));
         layerTools.Controls.Add(Theme.Button("↓", async (_, _) => await MoveLayer(-1)));
@@ -109,12 +131,12 @@ public sealed partial class MainWindow : Form
         center.Controls.Add(_projectTitle, 0, 0); center.Controls.Add(_preview, 0, 1); body.Controls.Add(center, 1, 0);
         body.Controls.Add(_inspectorTabs, 2, 0); root.Controls.Add(body, 0, 1);
         var transport = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(0, 8, 0, 0) };
-        transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 46)); transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 35)); transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 46)); transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 35)); transport.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
         var readout = new FlowLayoutPanel { Dock = DockStyle.Fill }; readout.Controls.Add(_clock); readout.Controls.Add(_position);
         transport.Controls.Add(readout, 0, 0); transport.Controls.Add(_timeline, 0, 1);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
         buttons.Controls.Add(Theme.Button("■ Stop", (_, _) => _engine?.Transport.Stop())); buttons.Controls.Add(_play);
-        buttons.Controls.Add(Theme.Button("◀ Frame", (_, _) => _engine?.Transport.Step(-1))); buttons.Controls.Add(Theme.Button("Frame ▶", (_, _) => _engine?.Transport.Step(1)));
+        buttons.Controls.Add(Theme.Button("◀ Frame", (_, _) => _engine?.StepFrame(-1))); buttons.Controls.Add(Theme.Button("Frame ▶", (_, _) => _engine?.StepFrame(1)));
         buttons.Controls.Add(Theme.Button("Set in [I]", async (_, _) => await SetLoopPoint(false))); buttons.Controls.Add(Theme.Button("Set out [O]", async (_, _) => await SetLoopPoint(true)));
         buttons.Controls.Add(_loop); buttons.Controls.Add(Theme.Label("Go to")); _goto.Width = 135; _goto.Margin = new Padding(5, 10, 5, 0); buttons.Controls.Add(_goto);
         buttons.Controls.Add(Theme.Button("Go", (_, _) => GoTo())); buttons.Controls.Add(Theme.Button("Undo", async (_, _) => await Undo())); buttons.Controls.Add(Theme.Button("Redo", async (_, _) => await Redo()));
@@ -127,13 +149,12 @@ public sealed partial class MainWindow : Form
     {
         try
         {
-            string runtime = Path.Combine(AppContext.BaseDirectory, "runtime");
-            // Development fallback; packaged builds carry their own native dependencies.
-            if (!Directory.Exists(runtime)) runtime = @"C:\Program Files\obs-studio\bin\64bit";
-            _engine = new ShowEngine(_preview.Handle, _preview.Width, _preview.Height, _project, runtime, Path.Combine(AppContext.BaseDirectory, "web"));
+            _engine = CreateEngine(_project);
             await _engine.Ready; PopulateRoutes();
+            if (_recordOnStartup) ToggleRecording();
             if (_args.Length > 0 && _args[0] == "--smoke") { await RunSmoke(); return; }
             if (_args.Length > 0 && File.Exists(_args[0])) await OpenPath(_args[0]);
+            else await OfferRecovery();
         }
         catch (Exception ex) { ShowError(ex); }
     }
@@ -151,6 +172,12 @@ public sealed partial class MainWindow : Form
         _play.Enabled = snapshot.Mode == ClockMode.Internal; _timeline.Enabled = snapshot.Mode == ClockMode.Internal;
         _stream.Text = status.Streaming ? "■ Stop stream" : "Start stream";
         _status.Text = status.Error ?? status.MediaError ?? $"{status.Gpu}   ·   Render {status.RenderMilliseconds:0.00} ms   ·   Late {status.MissedDeadlines}   ·   Art-Net {status.ArtNetPackets:N0} packets   ·   Audio underruns {status.AudioUnderruns}   {(status.Streaming ? "·   HLS LIVE" : "")}";
+        if (_recorder != null)
+        {
+            _status.Text = "● REC   ·   " + _status.Text;
+            _recordLabel.Text = _recorder.Error is { } failure ? "Recording error: " + failure : "Recording once per second\n" + Path.GetFileName(_recorder.FilePath);
+        }
+        _diagnostics.Text = $"GPU\n{status.Gpu}\n\nRender mean / peak\n{status.MeanRenderMilliseconds:0.00} / {status.PeakRenderMilliseconds:0.00} ms\nFrames {status.RenderedFrames:N0} · late {status.MissedDeadlines:N0}\n\nAudio buffer underruns {status.AudioUnderruns}\nArt-Net packets {status.ArtNetPackets:N0}\n\nMIDI-DMX\n{status.MidiDmx}\n\nSpout output\n{status.SpoutOutput ?? "Off"}\n{status.SpoutStatus}";
     }
     private void TogglePlay()
     { if (_engine == null) return; if (_engine.Transport.Snapshot().State == TransportState.Playing) _engine.Transport.Pause(); else _engine.Transport.Play(); }
@@ -166,19 +193,45 @@ public sealed partial class MainWindow : Form
     {
         await Guard(async () =>
         {
-            await _engine!.SetProjectAsync(next); _history.Apply(name, next); _project = next; _dirty = true; RefreshProjectUi();
+            if (next.GpuAdapter != _project.GpuAdapter) await RestartEngine(next);
+            else await _engine!.SetProjectAsync(next);
+            _history.Apply(name, next); _project = next; _dirty = true; RefreshProjectUi();
         });
     }
-    private async Task Undo() { if (_history.Undo()) { _project = _history.Current; await Guard(() => _engine!.SetProjectAsync(_project)); _dirty = true; RefreshProjectUi(); } }
-    private async Task Redo() { if (_history.Redo()) { _project = _history.Current; await Guard(() => _engine!.SetProjectAsync(_project)); _dirty = true; RefreshProjectUi(); } }
+    private async Task Undo() => await RestoreHistory(false);
+    private async Task Redo() => await RestoreHistory(true);
+    private async Task RestoreHistory(bool redo)
+    {
+        if (!(redo ? _history.Redo() : _history.Undo())) return;
+        await Guard(async () =>
+        {
+            try
+            {
+                var next = _history.Current;
+                if (next.GpuAdapter != _project.GpuAdapter) await RestartEngine(next);
+                else await _engine!.SetProjectAsync(next);
+                if (next.MediaPath != _project.MediaPath)
+                { if (next.MediaPath != null) await _engine!.LoadMediaAsync(next.MediaPath); else await _engine!.ClearMediaAsync(); }
+                _project = next; _dirty = true; RefreshProjectUi();
+            }
+            catch { if (redo) _history.Undo(); else _history.Redo(); throw; }
+        });
+    }
     private void RefreshProjectUi()
     {
         _binding = true;
         _layers.Items.Clear(); foreach (var layer in _project.Layers.AsEnumerable().Reverse()) _layers.Items.Add(new LayerItem(layer));
         for (int i = 0; i < _layers.Items.Count; i++) if (((LayerItem)_layers.Items[i]).Layer.Id == _selected) _layers.SelectedIndex = i;
-        _markers.Items.Clear(); foreach (var marker in _project.Markers.OrderBy(m => m.PositionTicks)) _markers.Items.Add(new MarkerItem(marker));
+        Guid? selectedMarker = (_markers.SelectedItem as MarkerItem)?.Marker.Id;
+        _markers.Items.Clear();
+        foreach (var marker in _project.Markers.OrderBy(m => m.PositionTicks))
+        {
+            int index = _markers.Items.Add(new MarkerItem(marker, Timecode.FromFrameNumber(
+                _project.Clock.Rate.ToFrames(TimeSpan.FromTicks(marker.PositionTicks)) + _project.Clock.OffsetFrames, _project.Clock.Rate).ToString()));
+            if (marker.Id == selectedMarker) _markers.SelectedIndex = index;
+        }
         _projectTitle.Text = _project.Name + (_dirty ? "  •" : "") + $"    {_project.Width} × {_project.Height} / {(double)_project.FpsNumerator / _project.FpsDenominator:0.###} fps";
-        Text = $"{_project.Name}{(_dirty ? " *" : "")} — StageFlow 0.1.0-alpha.1";
+        Text = $"{_project.Name}{(_dirty ? " *" : "")} — StageFlow {Program.DisplayVersion}";
         _loop.Text = _project.LoopEnabled ? "Loop: ON" : "Loop: off";
         _binding = false; BindInspector(); BindRoutes();
     }
@@ -228,6 +281,20 @@ public sealed partial class MainWindow : Form
     private async Task RemoveMarker()
     { if (_markers.SelectedItem is MarkerItem item) await Edit("Remove marker", _project with { Markers = _project.Markers.Where(m => m.Id != item.Marker.Id).ToList() }); }
     private void JumpToSelectedMarker() { if (_markers.SelectedItem is MarkerItem item) _engine?.Transport.Seek(TimeSpan.FromTicks(item.Marker.PositionTicks)); }
+    private async Task RenameMarker()
+    {
+        if (_markers.SelectedItem is not MarkerItem item) return;
+        string? name = Prompt("Marker name", item.Marker.Name); if (name == null) return;
+        await Edit("Rename marker", _project with { Markers = _project.Markers.Select(m => m.Id == item.Marker.Id ? m with { Name = name } : m).ToList() });
+    }
+    private void JumpMarker(int direction)
+    {
+        if (_engine == null) return;
+        long position = _engine.Transport.Snapshot().Position.Ticks;
+        var marker = direction > 0 ? _project.Markers.OrderBy(m => m.PositionTicks).FirstOrDefault(m => m.PositionTicks > position + 10000)
+            : _project.Markers.OrderByDescending(m => m.PositionTicks).FirstOrDefault(m => m.PositionTicks < position - 10000);
+        if (marker != null) _engine.Transport.Seek(TimeSpan.FromTicks(marker.PositionTicks));
+    }
     private async Task SetLoopPoint(bool end)
     {
         if (_engine == null) return;
@@ -252,24 +319,33 @@ public sealed partial class MainWindow : Form
     private void PreviewMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return; _preview.Focus(); var p = CanvasPoint(e.Location);
-        var layer = _project.Layers.LastOrDefault(l => l.Visible && p.X >= l.X && p.X <= l.X + l.Width && p.Y >= l.Y && p.Y <= l.Y + l.Height);
+        var layer = _project.Layers.LastOrDefault(l => l.Visible && !l.Locked && p.X >= l.X && p.X <= l.X + l.Width && p.Y >= l.Y && p.Y <= l.Y + l.Height);
         _selected = layer?.Id; RefreshProjectUi();
-        if (layer is { Locked: false }) { _dragLayer = layer; _dragStart = p; _preview.Capture = true; }
+        if (layer is { Locked: false })
+        {
+            _dragLayer = _pendingDrag = layer; _dragStart = p; _preview.Capture = true;
+            double tolerance = 12.0 * _project.Width / Math.Max(1, _preview.Width);
+            _dragResize = layer.Kind != LayerKind.Grid && Math.Abs(p.X - layer.X - layer.Width) < tolerance && Math.Abs(p.Y - layer.Y - layer.Height) < tolerance;
+        }
     }
     private async void PreviewMouseMove(object? sender, MouseEventArgs e)
     {
         if (_dragLayer == null || _engine == null) return;
         var p = CanvasPoint(e.Location); double x = _dragLayer.X + p.X - _dragStart.X, y = _dragLayer.Y + p.Y - _dragStart.Y;
         if ((ModifierKeys & Keys.Shift) != 0) { x = Math.Round(x / 8) * 8; y = Math.Round(y / 8) * 8; }
-        var changed = _dragLayer with { X = Math.Round(x), Y = Math.Round(y) };
+        var changed = _dragResize ? _dragLayer with { Width = Math.Max(1, Math.Round(_dragLayer.Width + p.X - _dragStart.X)), Height = Math.Max(1, Math.Round(_dragLayer.Height + p.Y - _dragStart.Y)) }
+            : _dragLayer with { X = Math.Round(x), Y = Math.Round(y) };
+        _pendingDrag = changed;
+        if (Environment.TickCount64 - _lastDrag < 30) return;
+        _lastDrag = Environment.TickCount64;
         var preview = _project with { Layers = _project.Layers.Select(l => l.Id == changed.Id ? changed : l).ToList() };
         try { await _engine.SetProjectAsync(preview); } catch (Exception ex) { _status.Text = ex.Message; }
     }
     private async void PreviewMouseUp(object? sender, MouseEventArgs e)
     {
         if (_dragLayer == null || _engine == null) return;
-        _dragLayer = null; _preview.Capture = false;
-        await Edit("Move layer", _engine.Project);
+        var changed = _pendingDrag; _dragLayer = _pendingDrag = null; _preview.Capture = false;
+        if (changed != null) await Edit(_dragResize ? "Resize layer" : "Move layer", _project with { Layers = _project.Layers.Select(l => l.Id == changed.Id ? changed : l).ToList() });
     }
     private static string? Prompt(string title, string initial)
     {
@@ -287,26 +363,32 @@ public sealed partial class MainWindow : Form
             if (choice == DialogResult.Cancel) { e.Cancel = true; return; }
             if (choice == DialogResult.Yes && !SaveProject()) { e.Cancel = true; return; }
         }
-        _uiTimer.Stop(); _autosave.Stop(); _engine?.Dispose(); _engine = null; _tips.Dispose();
+        _uiTimer.Stop(); _autosave.Stop(); _recorder?.Dispose(); _recorder = null; _engine?.Dispose(); _engine = null; _tips.Dispose();
+        ClearRecovery();
     }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == (Keys.Control | Keys.S)) { SaveProject(); return true; }
+        if (keyData == (Keys.Control | Keys.Shift | Keys.S)) { SaveProject(true); return true; }
+        if (keyData == (Keys.Control | Keys.N)) { _ = NewShow(); return true; }
+        if (keyData == (Keys.Control | Keys.Shift | Keys.O)) { _ = OpenProject(); return true; }
         if (keyData == (Keys.Control | Keys.O)) { _ = OpenMovie(); return true; }
         if (keyData == (Keys.Control | Keys.Z)) { _ = Undo(); return true; }
         if (keyData == (Keys.Control | Keys.Y)) { _ = Redo(); return true; }
+        if (keyData == (Keys.Control | Keys.Up)) { JumpMarker(-1); return true; }
+        if (keyData == (Keys.Control | Keys.Down)) { JumpMarker(1); return true; }
         if (keyData == Keys.F11 || (_fullscreen && keyData == Keys.Escape))
         {
             if (!_fullscreen) { _restoredBounds = Bounds; FormBorderStyle = FormBorderStyle.None; Bounds = Screen.FromControl(this).Bounds; }
             else { FormBorderStyle = FormBorderStyle.Sizable; Bounds = _restoredBounds; }
             _fullscreen = !_fullscreen; return true;
         }
-        if (ActiveControl is TextBoxBase or ComboBox or NumericUpDown) return base.ProcessCmdKey(ref msg, keyData);
+        if (HasEditorFocus(this)) return base.ProcessCmdKey(ref msg, keyData);
         switch (keyData)
         {
             case Keys.Space: TogglePlay(); return true;
-            case Keys.Left: _engine?.Transport.Step(-1); return true;
-            case Keys.Right: _engine?.Transport.Step(1); return true;
+            case Keys.Left: _engine?.StepFrame(-1); return true;
+            case Keys.Right: _engine?.StepFrame(1); return true;
             case Keys.M: _ = AddMarker(); return true;
             case Keys.I: _ = SetLoopPoint(false); return true;
             case Keys.O: _ = SetLoopPoint(true); return true;
@@ -315,6 +397,38 @@ public sealed partial class MainWindow : Form
         }
         return base.ProcessCmdKey(ref msg, keyData);
     }
+    private static bool HasEditorFocus(Control root)
+    {
+        foreach (Control child in root.Controls)
+            if (child.ContainsFocus && (child is TextBoxBase or ComboBox or NumericUpDown || HasEditorFocus(child))) return true;
+        return false;
+    }
+    private void ToggleRecording()
+    {
+        try
+        {
+            if (_recorder != null)
+            { string file = Path.GetFileName(_recorder.FilePath); _recorder.Dispose(); _recorder = null; _recordLabel.Text = "Saved " + file; }
+            else _recorder = new PerformanceRecorder(_diagnosticFolder, () => _engine);
+            _recordButton.Text = _recorder == null ? "Start performance recording" : "Stop performance recording";
+        }
+        catch (Exception ex) { ShowError(ex); }
+    }
     private sealed record LayerItem(Layer Layer) { public override string ToString() => Layer.Name; }
-    private sealed record MarkerItem(Marker Marker) { public override string ToString() => $"{TimeSpan.FromTicks(Marker.PositionTicks):hh\\:mm\\:ss}  {Marker.Name}"; }
+    private ShowEngine CreateEngine(ShowProject project)
+    {
+        string runtime = Path.Combine(AppContext.BaseDirectory, "runtime");
+        // Development builds may opt into a native fixture; portable releases always bundle it.
+        if (!Directory.Exists(runtime)) runtime = Environment.GetEnvironmentVariable("STAGEFLOW_NATIVE") ?? runtime;
+        return new(_preview.Handle, _preview.Width, _preview.Height, project, runtime, Path.Combine(AppContext.BaseDirectory, "web"));
+    }
+    private async Task RestartEngine(ShowProject next)
+    {
+        next.Validate();
+        if (_engine?.Status.Streaming == true) throw new InvalidOperationException("Stop streaming before changing GPU.");
+        _engine?.Dispose(); _engine = null; _midiArmed = false; _arm.Text = "MIDI outputs: off";
+        _engine = CreateEngine(next); await _engine.Ready;
+        if (next.MediaPath != null && File.Exists(next.MediaPath)) await _engine.LoadMediaAsync(next.MediaPath);
+    }
+    private sealed record MarkerItem(Marker Marker, string Timecode) { public override string ToString() => $"{Timecode}  {Marker.Name}"; }
 }

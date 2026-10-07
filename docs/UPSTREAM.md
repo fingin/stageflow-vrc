@@ -20,3 +20,35 @@ transcoding input. Import must never confuse those two fields. Its output is
 with 100 updates and 10 idle-scan channels. Unlimited serialization means the
 currently received universe range, bounded by the output layout, not billions
 of preallocated universes.
+
+## Other components
+
+- Spout2: https://github.com/leadedge/Spout2 — BSD-2-Clause. Shared registry,
+  metadata and synchronization compatibility follows the SDK sources. The runtime
+  implements Direct3D sharing directly and does not require SpoutLibrary.dll.
+- hls.js 1.6.13: https://github.com/video-dev/hls.js — Apache-2.0, bundled locally.
+- Vortice.Windows 3.8.3: https://github.com/amerkoleci/Vortice.Windows — MIT.
+- FFmpeg.AutoGen 8.0.0.1: https://github.com/Ruslan-B/FFmpeg.AutoGen — MIT.
+- NAudio 2.2.1: https://github.com/naudio/NAudio — MIT.
+- YamlDotNet 16.3.0: https://github.com/aaubry/YamlDotNet — MIT.
+- .NET/ASP.NET 10: https://github.com/dotnet — runtime license and third-party
+  notices are included by self-contained publishing.
+
+## Native media dependencies
+
+Unmodified DLLs come from the official OBS dependency release, not the OBS application:
+https://github.com/obsproject/obs-deps/releases/tag/2026-08-26
+
+`native-manifest.json` records the archive and DLL SHA-256 hashes. FFmpeg reports
+version n8.1.2 and GPL version 3 or later. The exact upstream FFmpeg revision is
+38b88335f99e76ed89ff3c93f877fdefce736c13. The OBS build recipes, dependency revisions,
+checksums and patches at f80e1d30181b0ff2b048b6d8fe8b8c501f3d221c are preserved in
+`licenses/native-build-recipes.zip`. `licenses/native-source-catalog.json` lists
+the corresponding upstream source locations and recipe pins. Per-component
+license texts are under `licenses/native/`.
+
+To rebuild native libraries, extract the recipe archive and follow its Windows
+build instructions with MSVC/MSYS2. Keep the pinned sources and supplied patches.
+The StageFlow package script uses the verified prebuilt DLLs, not a local native
+compiler. Public redistribution should accompany the full corresponding source
+and notices for the chosen native dependency build, as well as StageFlow's source.

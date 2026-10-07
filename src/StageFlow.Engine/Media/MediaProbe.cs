@@ -3,7 +3,7 @@ using FFmpeg.AutoGen;
 namespace StageFlow.Engine.Media;
 
 public sealed record MediaInfo(string Path, TimeSpan Duration, int Width, int Height, double VideoFps,
-    string VideoCodec, string? AudioCodec, int AudioSampleRate, int AudioChannels);
+    string VideoCodec, string? AudioCodec, int AudioSampleRate, int AudioChannels, int FpsNumerator, int FpsDenominator);
 
 public static unsafe class MediaProbe
 {
@@ -19,12 +19,15 @@ public static unsafe class MediaProbe
             if (video < 0) throw new InvalidDataException("The file has no supported video stream.");
             int audio = ffmpeg.av_find_best_stream(format, AVMediaType.AVMEDIA_TYPE_AUDIO, -1, -1, null, 0);
             var v = format->streams[video];
+            if (v->codecpar->color_trc is AVColorTransferCharacteristic.AVCOL_TRC_SMPTE2084 or AVColorTransferCharacteristic.AVCOL_TRC_ARIB_STD_B67)
+                throw new NotSupportedException("Use an SDR source for this build; HDR tone mapping is not supported.");
             var a = audio >= 0 ? format->streams[audio]->codecpar : null;
             var rate = ffmpeg.av_guess_frame_rate(format, v, null);
             double duration = format->duration == ffmpeg.AV_NOPTS_VALUE ? 0 : (double)format->duration / ffmpeg.AV_TIME_BASE;
+            if (duration <= 0 || !double.IsFinite(duration)) throw new InvalidDataException("The movie must have a finite, positive duration.");
             return new(path, TimeSpan.FromSeconds(Math.Max(0, duration)), v->codecpar->width, v->codecpar->height,
                 rate.den == 0 ? 0 : (double)rate.num / rate.den, ffmpeg.avcodec_get_name(v->codecpar->codec_id),
-                a == null ? null : ffmpeg.avcodec_get_name(a->codec_id), a == null ? 0 : a->sample_rate, a == null ? 0 : a->ch_layout.nb_channels);
+                a == null ? null : ffmpeg.avcodec_get_name(a->codec_id), a == null ? 0 : a->sample_rate, a == null ? 0 : a->ch_layout.nb_channels, rate.num, rate.den);
         }
         finally { if (format != null) ffmpeg.avformat_close_input(&format); }
     }

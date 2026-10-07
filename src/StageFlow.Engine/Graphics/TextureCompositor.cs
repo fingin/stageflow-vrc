@@ -16,6 +16,7 @@ public sealed class TextureCompositor : IDisposable
     private readonly ID3D11SamplerState _linear, _point;
     private readonly ID3D11BlendState _blend;
     private readonly ID3D11RasterizerState _raster;
+    private readonly GpuSurface _solid;
     [StructLayout(LayoutKind.Sequential)]
     private struct DrawConstants
     {
@@ -51,6 +52,15 @@ public sealed class TextureCompositor : IDisposable
         _point = gpu.Device.CreateSamplerState(SamplerDescription.PointClamp);
         _blend = gpu.Device.CreateBlendState(BlendDescription.AlphaBlend);
         _raster = gpu.Device.CreateRasterizerState(new RasterizerDescription(CullMode.None, FillMode.Solid));
+        _solid = new(gpu, 1, 1);
+    }
+    public void Fill(GpuSurface target, Vector4 rect, Vector4 color)
+        => Fill(target.Target, target.Width, target.Height, rect, color);
+    public void Fill(ID3D11RenderTargetView target, int width, int height, Vector4 rect, Vector4 color)
+    {
+        if (color.W <= 0) return;
+        _gpu.Context.ClearRenderTargetView(_solid.Target, new Color4(color.X, color.Y, color.Z, color.W));
+        Draw(target, width, height, _solid.View, rect, new(0, 0, 1, 1));
     }
     public void Draw(GpuSurface target, ID3D11ShaderResourceView image, Vector4 rect, Vector4 uv,
         float opacity = 1, bool point = false, bool premultiplied = false)
@@ -70,5 +80,5 @@ public sealed class TextureCompositor : IDisposable
         c.Draw(6, 0); c.PSSetShaderResource(0, null!);
     }
     public void Dispose()
-    { _raster.Dispose(); _blend.Dispose(); _point.Dispose(); _linear.Dispose(); _constants.Dispose(); _pixel.Dispose(); _vertex.Dispose(); }
+    { _solid.Dispose(); _raster.Dispose(); _blend.Dispose(); _point.Dispose(); _linear.Dispose(); _constants.Dispose(); _pixel.Dispose(); _vertex.Dispose(); }
 }

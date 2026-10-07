@@ -14,6 +14,7 @@ public sealed unsafe class TsSegmentMuxer : IDisposable
     private AVPacket* _copy;
     private double _start = double.NaN, _end;
     private readonly double _target;
+    private readonly Queue<nint> _earlyAudio = new();
     public TsSegmentMuxer(HlsSegmentStore store, AVCodecContext* video, AVCodecContext* audio, double targetSeconds)
     {
         _store = store; _video = video; _audio = audio; _target = targetSeconds;
@@ -33,10 +34,24 @@ public sealed unsafe class TsSegmentMuxer : IDisposable
         }
         _end = Math.Max(_end, time + Seconds(Math.Max(1, packet->duration), _video->time_base));
         Write(packet, 0, _video->time_base);
+        while (_earlyAudio.TryDequeue(out nint address))
+        {
+            var audio = (AVPacket*)address;
+            try { Write(audio, 1, _audio->time_base); }
+            finally { ffmpeg.av_packet_free(&audio); }
+        }
     }
     public void WriteAudio(AVPacket* packet)
     {
-        if (_format == null) return;
+        if (_format == null)
+        {
+            // Hardware video encoding can buffer several frames before its first IDR.
+            // Preserve the corresponding AAC packets so the movie's opening audio survives.
+            if (_earlyAudio.Count >= 64) throw new InvalidOperationException("Video encoder did not produce an initial keyframe in time.");
+            var clone = ffmpeg.av_packet_clone(packet);
+            if (clone == null) throw new OutOfMemoryException();
+            _earlyAudio.Enqueue((nint)clone); return;
+        }
         Write(packet, 1, _audio->time_base);
     }
     private void Write(AVPacket* packet, int stream, AVRational timeBase)
@@ -97,6 +112,7 @@ public sealed unsafe class TsSegmentMuxer : IDisposable
     public void Complete() { Finish(_end); _store.End(); }
     public void Dispose()
     {
+        while (_earlyAudio.TryDequeue(out nint address)) { var packet = (AVPacket*)address; ffmpeg.av_packet_free(&packet); }
         ReleaseContext(); AVPacket* copy = _copy; _copy = null; if (copy != null) ffmpeg.av_packet_free(&copy);
     }
 }

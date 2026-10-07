@@ -8,5 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="../StageFlow.Engine/StageFlow.Engine.csproj" />
     <Content Include="../../web/**" Link="web/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../runtime/*.dll" Link="runtime/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
