@@ -23,7 +23,7 @@ foreach ($name in @('README.md','CHANGELOG.md','LICENSE','native-manifest.json',
 }
 @'
 @echo off
-start "StageFlow v2 stress test" "%~dp0StageFlow.App.exe" --record "%~dp0samples\Sample Show.stageflow"
+start "StageFlow v2 stress test" "%~dp0StageFlow.App.exe" --record "%~dp0samples\Example.stageflow"
 '@ | Set-Content -LiteralPath (Join-Path $Destination 'Start Stress Test.cmd') -Encoding ascii
 $version = ([xml](Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props'))).Project.PropertyGroup.Version
 $commit = & git -C $repo rev-parse HEAD

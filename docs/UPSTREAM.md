@@ -18,13 +18,6 @@ BinaryStageFlight uses 4x4 binary cells, six bytes per column, four CRC bits and
 in the upper four bits. A partial six-byte group is zero padded to avoid the
 upstream GetRange exception when the received channel count is not divisible by 6.
 
-User reference (read-only): C:/Users/Night/Documents/Sample Show.shwcfg.
-Its actual active serializer is BinaryStageFlight; VRSL is the disabled
-transcoding input. Import must never confuse those two fields. Its output is
-2560x1440 at 60 fps; Art-Net bind is 127.0.0.1:6454. MIDI-DMX uses loopMIDI Port
-with 100 updates and 10 idle-scan channels. Unlimited serialization means the
-currently received universe range, bounded by the output layout, not billions
-of preallocated universes.
 
 ## Other components
 

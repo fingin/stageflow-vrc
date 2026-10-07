@@ -6,7 +6,7 @@ These credits cover StageFlow **2.0.0-alpha.5**. Exact versions, package names, 
 
 ## Project development
 
-- **Project owner and operator** — product concept, the original show workflow, Sample Show configuration, visual direction, stress testing and feedback.
+- **Project owner and operator** — product concept, the original show workflow, visual direction, stress testing and feedback.
 - **StageFlow development** — application-specific engine integration, transport, compositing, project/settings infrastructure and controls, developed with OpenAI Codex assistance.
 - **Earlier MTC Display prototype** — the starting workflow for repeatable, synchronized timecode overlays.
 

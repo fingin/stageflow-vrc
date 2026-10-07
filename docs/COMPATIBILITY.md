@@ -1,22 +1,5 @@
 # Compatibility and operating scope
 
-## Supplied show
-
-`Sample Show.shwcfg` imports as **BinaryStageFlight**, not VRSL. VRSL is an inactive
-deserializer. Output is 2560×1440/60, Art-Net is 127.0.0.1:6454, and unlimited
-serialization becomes received channel extent bounded by 45 full universes of canvas
-capacity. Original YAML is preserved inside the project; the `.shwcfg` is unchanged.
-
-Native formats: BinaryStageFlight/MDMX, Binary, Ternary and VRSL, including VRSL's
-four orientations, gamma and RGB packing. Channel/inverse masks and zero transparency
-are imported. Keep data grids at native pixel size and full opacity, with clocks
-outside their data area. Overpainting, scaling, low bitrates or downstream resizing
-can corrupt encoded DMX. The layer inspector protects grid dimensions.
-
-Configurations requiring Hnode's Spout-grid transcoding or arbitrary DMX generators
-are rejected with an explanation. The supplied configuration uses neither. Other
-exporters remain in the embedded YAML but do not run. This replaces the supplied
-show's active workflows, not every Hnode plugin.
 
 ## Art-Net and MIDI
 

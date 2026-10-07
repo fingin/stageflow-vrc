@@ -81,7 +81,6 @@
 - Remove per-channel mask allocations, cache masks and right-size GPU grid buffers.
   The 45-universe × 60-update mask check allocates zero bytes.
 - Preserve route errors when streaming starts; retain standalone native dependencies.
-- Add a ready-to-load Sample project and stress-test launcher.
 - Full dynamic-workload performance remains under review; see validation results.
 
 ## 0.1.0-alpha.2 — 2026-10-06

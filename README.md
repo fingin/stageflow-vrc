@@ -29,8 +29,8 @@ required. This alpha was validated on the supplied RTX 4080 computer. See
 
 ## Start a show
 
-1. **File → Open movie**, then **Import Hnode layout**, or open the supplied
-   Sample Show sample. Import preserves your movie, clocks and existing live sources.
+1. **File → Open movie**, then **Import Hnode layout**.
+   Import preserves your movie, clocks and existing live sources.
 2. Open **Edit → Preferences** (Ctrl+,). Under **Timecode**, select Internal mode,
    the MTC rate and MIDI output to grandMA2, and enable output. Arm MIDI in the
    main window when ready. IncomingMtc mode instead follows the selected MIDI input.

@@ -17,8 +17,8 @@ passes. The independent RTMP authentication fixture receives 212 video and 331
 audio messages, verifies telemetry counters, and rejects an incorrect password
 with zero publish/media messages. These are local checks, not public-service tests.
 
-The 60-second application run opens Monitor during MP4 playback, imported Sample
-Show grids, three changing Art-Net universes, twelve additional clocks,
+The 60-second application run opens Monitor during MP4 playback,
+three changing Art-Net universes, twelve additional clocks,
 Spout output and HLS/AAC at 2560×1440/60. The actual engine snapshot reports the
 encoder running, HLS segments ready and Spout frames sent. After warmup, 45.03
 measured seconds produced 2,700 frames, **zero missed deadlines and zero audio
@@ -62,7 +62,7 @@ services and RTMPS certificates were not exercised.
 OSC new-show defaults are 8000 for commands and 8001 for feedback. Existing explicit
 project ports survive loading.
 
-The 60-second application smoke run used the supplied Sample Show layout,
+The 60-second application smoke run used example data provided by the user,
 2560×1440 at 60 fps, three dynamic Art-Net universes, twelve additional clocks,
 MP4 playback, Spout output and HLS/AAC. After warmup, 45.02 measured seconds produced
 2,700 frames with **zero missed deadlines and zero audio underruns**. Mean render
@@ -116,7 +116,7 @@ The following native checks passed after the v2 changes:
 
 ### Full-load performance
 
-RTX 4080, supplied movie, imported Sample layout, 2560×1440/60, 45 continuously changing
+RTX 4080, supplied movie, 2560×1440/60, 45 continuously changing
 Art-Net universes, 12 timecode overlays, Spout output and encoded HLS/AAC. The run
 lasted 60.91 s with a 45.32 s measured window after warm-up:
 
