@@ -7,3 +7,17 @@ runtime/
 *.user
 *.log
 *.stageflow.bak
+
+# Keep generated applications and downloaded native runtimes out of source history.
+**/artifacts/
+**/runtime/
+**/publish/
+**/TestResults/
+**/diagnostics/
+*.exe
+*.dll
+*.pdb
+*.nupkg
+*.msi
+*.msix
+*.dmp

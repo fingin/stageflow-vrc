@@ -7,6 +7,7 @@
     <Version>2.0.0-alpha.5</Version>
     <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <Authors>StageFlow contributors</Authors>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>

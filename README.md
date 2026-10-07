@@ -3,14 +3,21 @@
 A Windows show workspace for video, timecode, Art-Net grids, compositing and live
 video routing. This is the independent **v2 fork**. V1 remains frozen.
 
+This repository contains **source only**, with all available saved v1 and v2
+revisions preserved in Git. `main` is the default v2 checkout; `v1` is the frozen
+v1 branch. See the [version index](docs/VERSIONS.md) for release tags, navigation
+and the source archive verification. To run the app, follow **Build and modify**
+below; compiled applications and native runtime DLLs are not included here.
+
 See the [project credits and inspiration](docs/CREDITS.md) and the
 [complete dependency inventory](docs/DEPENDENCIES.md) for contributors, exact
 versions, source references and included license notices.
 
 Art-Net™ Designed by and Copyright Artistic Licence Engineering Ltd.
 
-Launch **StageFlow.App.exe** in the portable folder (this release is in
-**StageFlow-v2-Portable-alpha.5**). Save and close the previous build before switching. The portable build bundles
+After building, launch **StageFlow.App.exe** in the portable folder created by
+`scripts/package.ps1` (defaults to the sibling **StageFlow-v2-Portable** folder).
+Save and close the previous build before switching. The portable build bundles
 .NET, the native media/network libraries and the HLS player. It runs as one
 application process; OBS, MediaMTX, Hnode and an external FFmpeg process are not
 required. Existing Windows MIDI ports, including loopMIDI, remain selectable.
@@ -200,8 +207,9 @@ Use Windows x64 and .NET SDK 10.0.401 (or a compatible .NET 10 SDK):
 .\scripts\package.ps1
 ~~~
 
-The delivered runtime folder is already prepared. For a fresh source checkout,
-prepare-network obtains pinned OMT binaries and takes the official NDI 6.3.2 DLL
+This source checkout does not include a prepared runtime folder. Install the SDK
+on PATH, then run the preparation scripts above. prepare-network obtains pinned
+OMT binaries and takes the official NDI 6.3.2 DLL
 from the supplied directory or NDI_RUNTIME_DIR_V6; it checks all hashes. Download
 that runtime from https://ndi.link/NDIRedistV6. Native media preparation uses pinned
 OBS dependency DLLs; the OBS application is not included. A VC++ x64 runtime may be
@@ -214,5 +222,16 @@ packaged source commit. Keep schema migration and tests with behavior changes.
 
 See [architecture](docs/ARCHITECTURE.md), [review](docs/V2-REVIEW.md),
 [compatibility](docs/COMPATIBILITY.md), and [upstream notices](docs/UPSTREAM.md).
-StageFlow source is GPL-3.0-or-later; bundled libraries retain their own terms.
-NDI's proprietary runtime is covered by its included agreement, not StageFlow's license.
+
+## License
+
+StageFlow's original source code is licensed under **GPL-3.0-or-later**. You may
+redistribute it and/or modify it under the GNU General Public License as published
+by the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. It is provided without warranty; see [LICENSE](LICENSE)
+for the complete terms.
+
+Third-party code, assets and libraries retain their own licenses and notices in
+[licenses](licenses), [the dependency inventory](docs/DEPENDENCIES.md) and
+[upstream notices](docs/UPSTREAM.md). NDI's proprietary runtime is covered by its
+included agreement, not StageFlow's license; the runtime DLL is not in this repo.
