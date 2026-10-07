@@ -1,5 +1,10 @@
 # Upstream references and compatibility
 
+The consolidated [dependency inventory](DEPENDENCIES.md) includes all resolved
+managed packages, native libraries, web bundle components and framework notices.
+[Credits and inspiration](CREDITS.md) distinguishes adapted source from workflow
+and interface influences.
+
 Hnode: https://github.com/Happyrobot33/HNode
 Inspected revision: d4c4f2d4a9204a4b5b193d426028725d4b0727f7
 License: MIT; included in licenses/HNode-LICENSE.txt.
@@ -31,8 +36,10 @@ of preallocated universes.
 - FFmpeg.AutoGen 8.0.0.1: https://github.com/Ruslan-B/FFmpeg.AutoGen — MIT.
 - NAudio 2.2.1: https://github.com/naudio/NAudio — MIT.
 - YamlDotNet 16.3.0: https://github.com/aaubry/YamlDotNet — MIT.
-- .NET/ASP.NET 10: https://github.com/dotnet — runtime license and third-party
-  notices are included by self-contained publishing.
+- .NET/ASP.NET 10: https://github.com/dotnet — matching runtime licenses and
+  third-party notices are preserved under licenses/dotnet. Managed package
+  notices are under licenses/managed, and embedded browser-module notices under
+  licenses/web.
 
 ## Native media dependencies
 

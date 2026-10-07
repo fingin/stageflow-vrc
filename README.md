@@ -3,6 +3,12 @@
 A Windows show workspace for video, timecode, Art-Net grids, compositing and live
 video routing. This is the independent **v2 fork**. V1 remains frozen.
 
+See the [project credits and inspiration](docs/CREDITS.md) and the
+[complete dependency inventory](docs/DEPENDENCIES.md) for contributors, exact
+versions, source references and included license notices.
+
+Art-Net™ Designed by and Copyright Artistic Licence Engineering Ltd.
+
 Launch **StageFlow.App.exe** in the portable folder (this release is in
 **StageFlow-v2-Portable-alpha.5**). Save and close the previous build before switching. The portable build bundles
 .NET, the native media/network libraries and the HLS player. It runs as one

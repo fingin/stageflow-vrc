@@ -1,0 +1,645 @@
+{
+  "application": {
+    "target": "win-x64",
+    "selfContained": true,
+    "sourceCommit": "b8cf05553b83cb3056c3394f5877c9374613a315",
+    "version": "2.0.0-alpha.5",
+    "builtUtc": "2026-10-07T06:09:57.8895739Z"
+  },
+  "auditedPacificDate": "2026-10-06",
+  "scope": "StageFlow v2 alpha.5 application dependencies, shipped native binary hashes, web bundle constituents and source references. Upstream framework/build notices are broader than platform-specific linked code. This is not a claim of whole-source redistribution completeness.",
+  "internalProjects": [
+    {
+      "name": "StageFlow.App",
+      "version": "2.0.0-alpha.5"
+    },
+    {
+      "name": "StageFlow.Core",
+      "version": "2.0.0-alpha.5"
+    },
+    {
+      "name": "StageFlow.Engine",
+      "version": "2.0.0-alpha.5"
+    }
+  ],
+  "managedPackages": [
+    {
+      "name": "FFmpeg.AutoGen",
+      "version": "8.0.0.1",
+      "authors": "Ruslan Balanukhin",
+      "projectUrl": "https://github.com/Ruslan-B/FFmpeg.AutoGen",
+      "revision": "8003b88e6a3189bcceba6825e134ad7ed0e06928",
+      "license": {
+        "type": "file",
+        "value": "LICENSE.txt"
+      },
+      "packageContentHash": "sha512-GrkNQjYwjOI56yh3cKhOP4yGm74gBXY2qU0blBEBfQtIho9SD6KemnVvh/loouop8wGnPHOrpL/WB3htgT2jkg==",
+      "noticeFiles": [
+        "licenses/managed/FFmpeg.AutoGen/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio",
+      "version": "2.2.1",
+      "authors": "Mark Heath & Contributors",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "file",
+        "value": "license.txt"
+      },
+      "packageContentHash": "sha512-c0DzwiyyklM0TP39Y7RObwO3QkWecgM6H60ikiEnsV/aEAJPbj5MFCLaD8BSfKuZe0HGuh9GRGWWlJmSxDc9MA==",
+      "noticeFiles": [
+        "licenses/managed/NAudio/license.txt"
+      ]
+    },
+    {
+      "name": "NAudio.Asio",
+      "version": "2.2.1",
+      "authors": "Mark Heath",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-hQglyOT5iT3XuGpBP8ZG0+aoqwRfidHjTNehpoWwX0g6KJEgtH2VaqM2nuJ2mheKZa/IBqB4YQTZVvrIapzfOA==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio.Core",
+      "version": "2.2.1",
+      "authors": "Mark Heath",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio.Midi",
+      "version": "2.2.1",
+      "authors": "Mark Heath",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-6r23ylGo5aeP02WFXsPquz0T0hFJWyh+7t++tz19tc3Kr38NHm+Z9j+FiAv+xkH8tZqXJqus9Q8p6u7bidIgbw==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio.Wasapi",
+      "version": "2.2.1",
+      "authors": "Mark Heath",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-lFfXoqacZZe0WqNChJgGYI+XV/n/61LzPHT3C1CJp4khoxeo2sziyX5wzNYWeCMNbsWxFvT3b3iXeY1UYjBhZw==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio.WinForms",
+      "version": "2.2.1",
+      "authors": "Mark Heath",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-DlDkewY1myY0A+3NrYRJD+MZhZV0yy1mNF6dckB27IQ9XCs/My5Ip8BZcoSHOsaPSe2GAjvoaDnk6N9w8xTv7w==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "NAudio.WinMM",
+      "version": "2.2.1",
+      "authors": "NAudio.WinMM",
+      "projectUrl": "https://github.com/naudio/NAudio",
+      "repository": "https://github.com/naudio/NAudio",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-xFHRFwH4x6aq3IxRbewvO33ugJRvZFEOfO62i7uQJRUNW2cnu6BeBTHUS0JD5KBucZbHZaYqxQG8dwZ47ezQuQ==",
+      "noticeFiles": [
+        "licenses/NAudio-LICENSE.txt"
+      ]
+    },
+    {
+      "name": "SharpGen.Runtime",
+      "version": "2.4.2-beta",
+      "authors": "jkoritzinsky",
+      "projectUrl": "https://github.com/SharpGenTools/SharpGenTools",
+      "repository": "https://github.com/SharpGenTools/SharpGenTools",
+      "revision": "6990bcafe124a4c22515ad19cee5a081da8db67b",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w==",
+      "noticeFiles": [
+        "licenses/managed/SharpGenTools/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "SharpGen.Runtime.COM",
+      "version": "2.4.2-beta",
+      "authors": "jkoritzinsky",
+      "projectUrl": "https://github.com/SharpGenTools/SharpGenTools",
+      "repository": "https://github.com/SharpGenTools/SharpGenTools",
+      "revision": "6990bcafe124a4c22515ad19cee5a081da8db67b",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-9lxDFMiepqo3lJQzMSjECCIONeCc2f3Drokgj6HtrTLZcJSftNgcLbD6/iXYj2iphkwgrZb1oLsDOZxoFZkawQ==",
+      "noticeFiles": [
+        "licenses/managed/SharpGenTools/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.D3DCompiler",
+      "version": "3.8.3",
+      "authors": "Amer Koleci",
+      "repository": "https://github.com/amerkoleci/Vortice.Windows",
+      "revision": "9e609cb9439c9872aa1b339f177e40ec96f77239",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-OmGPMhf/xnD8/HZ0ms1x7xSFyz+6e6mveCqhu0EioMFQYKJM35/ZVLLo+FIB5KpsrlqhM/jvYHYPAxu45YONGg==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Windows/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.Direct2D1",
+      "version": "3.8.3",
+      "authors": "Amer Koleci",
+      "repository": "https://github.com/amerkoleci/Vortice.Windows",
+      "revision": "9e609cb9439c9872aa1b339f177e40ec96f77239",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-SDHEmNUT3A4P8yj+g7q3AnRZ9fvqOOe/EoWjsgkHlQ3C9Tkc51rTeZXC9bQPySli+/lFTui8vMs9tpWZqf+AwQ==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Windows/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.Direct3D11",
+      "version": "3.8.3",
+      "authors": "Amer Koleci",
+      "repository": "https://github.com/amerkoleci/Vortice.Windows",
+      "revision": "9e609cb9439c9872aa1b339f177e40ec96f77239",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-JgFUswu2mgrSwcd0KRF2AnfeE5VbMEgcicmxPD1g2yXyomPIHbnX3wldBNHPOzzD0URC1WJ/pO1ymfi3imZwvg==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Windows/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.DirectX",
+      "version": "3.8.3",
+      "authors": "Amer Koleci",
+      "repository": "https://github.com/amerkoleci/Vortice.Windows",
+      "revision": "9e609cb9439c9872aa1b339f177e40ec96f77239",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-nKwSavv0w5rDF7prSefqAVPDcTyqrfZxKFMVfttiXPfm62VdA/1d+b3PhCZpW4xO7jXczXDwjQdWgD1zGsvM8w==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Windows/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.DXGI",
+      "version": "3.8.3",
+      "authors": "Amer Koleci",
+      "repository": "https://github.com/amerkoleci/Vortice.Windows",
+      "revision": "9e609cb9439c9872aa1b339f177e40ec96f77239",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-MbAUnTeQ6WD99ctAdrj5CQO2I7oaax0Kt2eVdWSUj0bYP9Ed0726+s7dIHe4+tqhpmINW/dcPt0mNtc72o+E0w==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Windows/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Vortice.Mathematics",
+      "version": "2.1.0",
+      "authors": "Amer Koleci",
+      "projectUrl": "https://github.com/amerkoleci/Vortice.Mathematics",
+      "repository": "https://github.com/amerkoleci/Vortice.Mathematics",
+      "revision": "fa05ec6dcba48f3f7331791da6dc7f3d866b2ad6",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-KK+SjNSuKdP+zbavekubi+vaeb1Jo4k87ZF6CMkVWjr6RjJwc8peVtmgzXXDIMy4ZC3ZISyk3llY3q65ISOkBQ==",
+      "noticeFiles": [
+        "licenses/managed/Vortice.Mathematics/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "YamlDotNet",
+      "version": "16.3.0",
+      "authors": "Antoine Aubry",
+      "projectUrl": "https://github.com/aaubry/YamlDotNet/wiki",
+      "repository": "https://github.com/aaubry/YamlDotNet",
+      "revision": "ae480660f4fb26f3eb0b41c1d1fcf21c0e9d9e73",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "sha512-SgMOdxbz8X65z8hraIs6hOEdnkH6hESTAIUa7viEngHOYaH+6q5XJmwr1+yb9vJpNQ19hCQY69xbFsLtXpobQA==",
+      "noticeFiles": [
+        "licenses/managed/YamlDotNet/LICENSE.txt"
+      ]
+    }
+  ],
+  "frameworkPacks": [
+    {
+      "name": "Microsoft.NETCore.App.Runtime.win-x64",
+      "version": "10.0.12",
+      "authors": "Microsoft",
+      "projectUrl": "https://dot.net/",
+      "repository": "https://github.com/dotnet/dotnet",
+      "revision": "95017c711e6afc1085133d440e42b4bd78155701",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "",
+      "noticeFiles": [
+        "licenses/dotnet/Microsoft.NETCore.App.Runtime.win-x64/LICENSE.TXT",
+        "licenses/dotnet/Microsoft.NETCore.App.Runtime.win-x64/THIRD-PARTY-NOTICES.TXT"
+      ]
+    },
+    {
+      "name": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+      "version": "10.0.12",
+      "authors": "Microsoft",
+      "projectUrl": "https://dot.net/",
+      "repository": "https://github.com/dotnet/dotnet",
+      "revision": "95017c711e6afc1085133d440e42b4bd78155701",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "",
+      "noticeFiles": [
+        "licenses/dotnet/Microsoft.WindowsDesktop.App.Runtime.win-x64/LICENSE"
+      ]
+    },
+    {
+      "name": "Microsoft.AspNetCore.App.Runtime.win-x64",
+      "version": "10.0.12",
+      "authors": "Microsoft",
+      "projectUrl": "https://asp.net/",
+      "repository": "https://github.com/dotnet/dotnet",
+      "revision": "95017c711e6afc1085133d440e42b4bd78155701",
+      "license": {
+        "type": "expression",
+        "value": "MIT"
+      },
+      "packageContentHash": "",
+      "noticeFiles": [
+        "licenses/dotnet/Microsoft.AspNetCore.App.Runtime.win-x64/LICENSE.txt",
+        "licenses/dotnet/Microsoft.AspNetCore.App.Runtime.win-x64/THIRD-PARTY-NOTICES.TXT"
+      ]
+    }
+  ],
+  "webBundle": [
+    {
+      "name": "hls.js",
+      "version": "1.6.13",
+      "repository": "https://github.com/video-dev/hls.js",
+      "license": "Apache-2.0",
+      "sha256": "62c63874d66a435eeceb895be4c2fab601fa1a67cd9600d6ea2c859af7d98dba",
+      "upstreamSha256": "7c47cd97d7a6e7b98d9623dd8ed9a6d45af4be4085e0c2001cd7175c2b4cfb07",
+      "verification": "Identical after CRLF/LF normalization"
+    },
+    {
+      "name": "eventemitter3",
+      "version": "5.0.1",
+      "license": "MIT",
+      "repository": "git://github.com/primus/eventemitter3.git",
+      "notice": "licenses/web/eventemitter3/LICENSE.txt"
+    },
+    {
+      "name": "url-toolkit",
+      "version": "2.2.5",
+      "license": "Apache-2.0",
+      "repository": "git+https://github.com/tjenkinson/url-toolkit.git",
+      "notice": "licenses/web/url-toolkit/LICENSE.txt"
+    },
+    {
+      "name": "@svta/common-media-library",
+      "version": "0.17.1",
+      "license": "Apache-2.0",
+      "repository": "git+https://github.com/streaming-video-technology-alliance/common-media-library.git",
+      "notice": "licenses/web/@svta-common-media-library/LICENSE.txt"
+    }
+  ],
+  "nativeFiles": [
+    {
+      "name": "avcodec-62.dll",
+      "sha256": "96E906FBF0CD9049234FEF7A8D30EF3F6CDD898794DAD4EBAB78452546CFDA2A",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "avformat-62.dll",
+      "sha256": "D6CDDEAABAABE27301EF4440F6C64B8CE88DB37203A3DB51EC52BAFF475711BF",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "avutil-60.dll",
+      "sha256": "A75E48D829EFAB5CF8368E81063665EB1A625AE2724CB05B0762E6DAF8D003AE",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "swresample-6.dll",
+      "sha256": "8165A0DF3643F48AA2C327F80CADAD281D3372F115DCC63DF5D3C0C22AE6D063",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "swscale-9.dll",
+      "sha256": "D9DC15EF7862D702664BEDC99B5AF3CBBF6BEF3B5360138326865B3CD911C39E",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "libx264-164.dll",
+      "sha256": "E1003815F14AB4DBEC78366212BE3F6DBA4251B9F8442393A5E8E035B222620D",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "librist.dll",
+      "sha256": "2583A465D8F6D0B2760A819E2973CA29B4908FB5B98B3D8848F89D5D624E9F6C",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "srt.dll",
+      "sha256": "4AD6176A0FB8BC77A627EB32C1B0B82BE65D4F01873ADD4E262451C7501EFBC4",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "zlib.dll",
+      "sha256": "D3141E12F549F63AB4855351001E50CA1DC8018D16289D736D3577C9A1FC1352",
+      "source": "https://github.com/obsproject/obs-deps/releases/download/2026-08-26/windows-deps-2026-08-26-x64.zip"
+    },
+    {
+      "name": "libomt.dll",
+      "sha256": "673B1D33222295F1C9190C54CEFC89D5E322301702532E2C8FE78A16E8AA28DA",
+      "source": "https://github.com/openmediatransport/libomtnet/releases/download/v1.0.0.19/OpenMediaTransport.Binaries.Release.v1.0.0.19.zip"
+    },
+    {
+      "name": "libvmx.dll",
+      "sha256": "EFFD2EB33A85689DA940AB6744CF8931448445144C5D7991AC50908800AF19BE",
+      "source": "https://github.com/openmediatransport/libomtnet/releases/download/v1.0.0.19/OpenMediaTransport.Binaries.Release.v1.0.0.19.zip"
+    },
+    {
+      "name": "Processing.NDI.Lib.x64.dll",
+      "sha256": "2B6602075868BA4401F82F417D72424805D69B11CA86078023D0D489FF45DD84",
+      "source": "https://ndi.link/NDIRedistV6"
+    }
+  ],
+  "nativeSourceRecipes": [
+    {
+      "recipe": "10-zlib.ps1",
+      "Name": "zlib",
+      "Version": "1.3.1",
+      "Uri": "https://github.com/madler/zlib.git",
+      "Hash": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"
+    },
+    {
+      "recipe": "20-libpng.ps1",
+      "Name": "libpng",
+      "Version": "1.6.47",
+      "Uri": "https://sourceforge.net/projects/libpng/files/libpng16/1.6.47/lpng1647.zip",
+      "Hash": "\"${PSScriptRoot}/checksums/lpng1647.zip.sha256\""
+    },
+    {
+      "recipe": "20-opus.ps1",
+      "Name": "opus",
+      "Version": "1.5.2",
+      "Uri": "https://github.com/xiph/opus.git",
+      "Hash": "ddbe48383984d56acd9e1ab6a090c54ca6b735a6"
+    },
+    {
+      "recipe": "30-libogg.ps1",
+      "Name": "libogg",
+      "Version": "1.3.5",
+      "Uri": "https://github.com/xiph/ogg.git",
+      "Hash": "fa80aae9d50096160f2b56ada35527d7aee3f746"
+    },
+    {
+      "recipe": "30-libvorbis.ps1",
+      "Name": "libvorbis",
+      "Version": "1.3.7",
+      "Uri": "https://gitlab.xiph.org/xiph/vorbis.git",
+      "Hash": "2eac96b03ff67953354cb0a649c08aa3a23267ef"
+    },
+    {
+      "recipe": "30-libvpx.ps1",
+      "Name": "libvpx",
+      "Version": "1.14.1",
+      "Uri": "https://github.com/webmproject/libvpx/archive/refs/tags/v1.14.1.zip",
+      "Hash": "\"${PSScriptRoot}/checksums/v1.14.1.zip.sha256\""
+    },
+    {
+      "recipe": "30-svt-av1.ps1",
+      "Name": "svt-av1",
+      "Version": "2.3.0",
+      "Uri": "https://gitlab.com/AOMediaCodec/SVT-AV1.git",
+      "Hash": "6e69def4ec283fe0b71195671245c3b768bebdef"
+    },
+    {
+      "recipe": "40-aom.ps1",
+      "Name": "aom",
+      "Version": "3.13.1",
+      "Uri": "https://aomedia.googlesource.com/aom.git",
+      "Hash": "d772e334cc724105040382a977ebb10dfd393293"
+    },
+    {
+      "recipe": "40-gas-preprocessor.ps1",
+      "Name": "gas-preprocessor",
+      "Version": "0.0.0",
+      "Uri": "https://github.com/FFmpeg/gas-preprocessor.git",
+      "Hash": "9309c67acb535ca6248f092e96131d8eb07eefc1"
+    },
+    {
+      "recipe": "40-x264.ps1",
+      "Name": "x264",
+      "Version": "r3106",
+      "Uri": "https://github.com/mirror/x264.git",
+      "Hash": "eaa68fad9e5d201d42fde51665f2d137ae96baf0"
+    },
+    {
+      "recipe": "50-libtheora.ps1",
+      "Name": "libtheora",
+      "Version": "1.1.1",
+      "Uri": "https://ftp.osuosl.org/pub/xiph/releases/theora/libtheora-1.1.1.zip",
+      "Hash": "\"${PSScriptRoot}/checksums/libtheora-1.1.1.zip.sha256\""
+    },
+    {
+      "recipe": "60-lame.ps1",
+      "Name": "lame",
+      "Version": "3.100",
+      "Uri": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+      "Hash": "\"${PSScriptRoot}/checksums/lame-3.100.tar.gz.win.sha256\""
+    },
+    {
+      "recipe": "60-mbedtls.ps1",
+      "Name": "mbedtls",
+      "Version": "3.6.4",
+      "Uri": "https://github.com/Mbed-TLS/mbedtls.git",
+      "Hash": "c765c831e5c2a0971410692f92f7a81d6ec65ec2"
+    },
+    {
+      "recipe": "60-srt.ps1",
+      "Name": "srt",
+      "Version": "1.5.2",
+      "Uri": "https://github.com/Haivision/srt/archive/refs/tags/v1.5.2.zip",
+      "Hash": "\"${PSScriptRoot}/checksums/v1.5.2.zip.sha256\""
+    },
+    {
+      "recipe": "70-libdatachannel.ps1",
+      "Name": "libdatachannel",
+      "Version": "v0.24.2",
+      "Uri": "https://github.com/paullouisageneau/libdatachannel.git",
+      "Hash": "4e4f4892dccb2a57fe3a490d0c9d958de4244e74"
+    },
+    {
+      "recipe": "70-librist.ps1",
+      "Name": "librist",
+      "Version": "0.2.7",
+      "Uri": "https://code.videolan.org/rist/librist.git",
+      "Hash": "809390b3b75a259a704079d0fb4d8f1b5f7fa956"
+    },
+    {
+      "recipe": "70-nv-codec.ps1",
+      "Name": "nv-codec-headers",
+      "Version": "13.0.19.0",
+      "Uri": "https://github.com/FFmpeg/nv-codec-headers.git",
+      "Hash": "e844e5b26f46bb77479f063029595293aa8f812d"
+    },
+    {
+      "recipe": "80-amf.ps1",
+      "Name": "amf",
+      "Version": "1.5.0",
+      "Uri": "https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git",
+      "Hash": "afed28d37aca1938da2eedc50599bb3535a987ec"
+    },
+    {
+      "recipe": "99-ffmpeg.ps1",
+      "Name": "FFmpeg",
+      "Version": "8.1.2",
+      "Uri": "https://github.com/FFmpeg/FFmpeg.git",
+      "Hash": "38b88335f99e76ed89ff3c93f877fdefce736c13"
+    }
+  ],
+  "inheritedNoticesIndex": "docs/INHERITED-NOTICES.md",
+  "addedNoticeProvenance": [
+    {
+      "file": "licenses/dotnet/Microsoft.AspNetCore.App.Runtime.win-x64/LICENSE.txt",
+      "source": "Microsoft.AspNetCore.App.Runtime.win-x64/10.0.12 NuGet package: LICENSE.txt",
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+    },
+    {
+      "file": "licenses/dotnet/Microsoft.AspNetCore.App.Runtime.win-x64/THIRD-PARTY-NOTICES.TXT",
+      "source": "Microsoft.AspNetCore.App.Runtime.win-x64/10.0.12 NuGet package: THIRD-PARTY-NOTICES.TXT",
+      "sha256": "307d014f65d8482314f1400ddeae7a0cbabb96c2207bcc77f6233cc10588e5d9"
+    },
+    {
+      "file": "licenses/dotnet/Microsoft.NETCore.App.Runtime.win-x64/LICENSE.TXT",
+      "source": "Microsoft.NETCore.App.Runtime.win-x64/10.0.12 NuGet package: LICENSE.TXT",
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+    },
+    {
+      "file": "licenses/dotnet/Microsoft.NETCore.App.Runtime.win-x64/THIRD-PARTY-NOTICES.TXT",
+      "source": "Microsoft.NETCore.App.Runtime.win-x64/10.0.12 NuGet package: THIRD-PARTY-NOTICES.TXT",
+      "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+    },
+    {
+      "file": "licenses/dotnet/Microsoft.WindowsDesktop.App.Runtime.win-x64/LICENSE",
+      "source": "Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.12 NuGet package: LICENSE",
+      "sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab"
+    },
+    {
+      "file": "licenses/managed/FFmpeg.AutoGen/LICENSE.txt",
+      "source": "FFmpeg.AutoGen/8.0.0.1 NuGet package: LICENSE.txt",
+      "sha256": "d9d39b4baf23ccb45bf9f31ff400121dbf081f3caa0ba1491e6f18272d182be1"
+    },
+    {
+      "file": "licenses/managed/NAudio/license.txt",
+      "source": "NAudio/2.2.1 NuGet package: license.txt",
+      "sha256": "303e01786b271eb464b3f43d18a375f2f17d37bc708a37c2fdf45b289fb5bfaa"
+    },
+    {
+      "file": "licenses/managed/SharpGenTools/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/SharpGenTools/SharpGenTools/6990bcafe124a4c22515ad19cee5a081da8db67b/LICENSE.txt",
+      "sha256": "1cc7abd1e97575838535484bef6e4ab14e81681ddf7837672acede5fca1d4e30"
+    },
+    {
+      "file": "licenses/managed/Vortice.Mathematics/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/amerkoleci/Vortice.Mathematics/fa05ec6dcba48f3f7331791da6dc7f3d866b2ad6/LICENSE",
+      "sha256": "cf72351fa2e9f2eb181af7fd508dd73da1d84ba43575cb98f7af22f26a81af5e"
+    },
+    {
+      "file": "licenses/managed/Vortice.Windows/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/amerkoleci/Vortice.Windows/9e609cb9439c9872aa1b339f177e40ec96f77239/LICENSE",
+      "sha256": "82bd4e84d144bebbb519ed05899f0ceaeaf2e0f95160ac32fd8cc388710c76d0"
+    },
+    {
+      "file": "licenses/managed/YamlDotNet/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/aaubry/YamlDotNet/ae480660f4fb26f3eb0b41c1d1fcf21c0e9d9e73/LICENSE.txt",
+      "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3"
+    },
+    {
+      "file": "licenses/VRC-MIDIDMX-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/micksam7/VRC-MIDIDMX/main/LICENSE",
+      "sha256": "d4fff79aa0757e4324acfecd3cfcfbe0a94b630d10876420cf76e0d4c193158d"
+    },
+    {
+      "file": "licenses/web/@svta-common-media-library/LICENSE.txt",
+      "source": "https://cdn.jsdelivr.net/npm/@svta/common-media-library@0.17.1/LICENSE",
+      "sha256": "95cdf13a152329c8a60cf739d442f578a172727f0584bff42406126719312f62"
+    },
+    {
+      "file": "licenses/web/eventemitter3/LICENSE.txt",
+      "source": "https://cdn.jsdelivr.net/npm/eventemitter3@5.0.1/LICENSE",
+      "sha256": "3aecc12b1cb28832b5f65ab64291de96568c3f236a74d646281b4491f7bcadbf"
+    },
+    {
+      "file": "licenses/web/url-toolkit/LICENSE.txt",
+      "source": "https://cdn.jsdelivr.net/npm/url-toolkit@2.2.5/LICENSE",
+      "sha256": "0fa4bd51fab4d066970c481917d77f222253ee82344caf07efd03801aa558dff"
+    }
+  ]
+}
