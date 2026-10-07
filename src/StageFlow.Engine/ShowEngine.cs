@@ -157,7 +157,7 @@ public sealed class ShowEngine : IDisposable
     {
         if (_encoder != null) return;
         var settings = _project.Stream;
-        var store = new HlsSegmentStore(settings.PlaylistSegments, targetSeconds: settings.SegmentSeconds);
+        var store = new HlsSegmentStore(settings.PlaylistSegments, targetSeconds: settings.HlsTargetSeconds(_project.FpsNumerator, _project.FpsDenominator));
         if (!settings.HlsEnabled && !_project.NetworkOutputs.Any(o => o.Enabled)) throw new InvalidOperationException("Enable HLS or a network stream destination first.");
         var encoder = new HardwareStreamEncoder(_gpu!, store, _project.Width, _project.Height, _project.FpsNumerator, _project.FpsDenominator, settings, _project.NetworkOutputs);
         var server = new HlsServer();

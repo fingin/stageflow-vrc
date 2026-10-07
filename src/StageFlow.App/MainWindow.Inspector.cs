@@ -140,7 +140,7 @@ public sealed partial class MainWindow
             {
                 var changed = (T)CloneRecord.Invoke(get(), null)!;
                 property.SetValue(changed, value); commit(WorkingProject, changed);
-            }, description: SettingHelp.Describe(typeof(T), property.Name), options: choices);
+            }, description: SettingHelp.Describe(typeof(T), property.Name), options: choices, secret: property.Name is "Password" or "StreamKey");
         }
     }
     private void QueueLive(string name, ShowProject next)
@@ -153,6 +153,7 @@ public sealed partial class MainWindow
     {
         _liveState.Text = message; _liveState.ForeColor = error ? Theme.Warning : Theme.Muted;
         if (_preferencesFeedback is { IsDisposed: false }) { _preferencesFeedback.Text = message; _preferencesFeedback.ForeColor = _liveState.ForeColor; }
+        if (_networkFeedback is { IsDisposed: false }) { _networkFeedback.Text = message; _networkFeedback.ForeColor = _liveState.ForeColor; }
     }
     private async Task FlushLiveEdits()
     {
@@ -172,11 +173,13 @@ public sealed partial class MainWindow
     {
         await DrainLiveEdits(); _projectOperation = _liveBusy = true;
         _workspace.Enabled = false; if (_preferencesWindow != null) _preferencesWindow.Enabled = false;
+        if (_networkWindow != null) _networkWindow.Enabled = false;
         try { await action(); }
         finally
         {
             _projectOperation = _liveBusy = false; _workspace.Enabled = true;
             if (_preferencesWindow != null) _preferencesWindow.Enabled = true;
+            if (_networkWindow != null) _networkWindow.Enabled = true;
             RefreshProjectUi(); if (_pendingProject != null) _liveTimer.Start();
         }
     }
@@ -279,35 +282,5 @@ public sealed partial class MainWindow
         }
         layout.Controls.Add(hint, 0, 0); layout.Controls.Add(source, 0, 1); layout.Controls.Add(actions, 0, 2); dialog.Controls.Add(layout); Theme.Apply(dialog, _preferences.TextSize);
         return dialog.ShowDialog(this) == DialogResult.OK ? source.Text.Trim() : null;
-    }
-    private void ShowNetworkOutputs()
-    {
-        using var dialog = new Form { Text = "StageFlow v2 · Network destinations", Size = new Size(830, 550), StartPosition = FormStartPosition.CenterParent, BackColor = Theme.Background };
-        var list = new ListBox { Dock = DockStyle.Left, Width = 230, BackColor = Theme.Panel, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, DisplayMember = "Name" };
-        var properties = CreatePropertyGrid(); var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 52 };
-        void RefreshList(Guid? select = null)
-        {
-            list.Items.Clear(); foreach (var output in WorkingProject.NetworkOutputs) list.Items.Add(output);
-            for (int i = 0; i < list.Items.Count; i++) if (((NetworkStreamOutput)list.Items[i]).Id == select) list.SelectedIndex = i;
-        }
-        foreach (var protocol in Enum.GetValues<NetworkStreamProtocol>()) buttons.Controls.Add(Theme.Button("+ " + protocol, (_, _) =>
-        {
-            var output = new NetworkStreamOutput { Name = protocol + " " + (WorkingProject.NetworkOutputs.Count + 1), Protocol = protocol,
-                Url = protocol == NetworkStreamProtocol.Rtmp ? "rtmp://127.0.0.1/live/stageflow" : "srt://127.0.0.1:9001?mode=caller&latency=120000" };
-            QueueLive("Add destination", WorkingProject with { NetworkOutputs = [.. WorkingProject.NetworkOutputs, output] }); RefreshList(output.Id);
-        }));
-        buttons.Controls.Add(Theme.Button("Remove", (_, _) =>
-        {
-            if (list.SelectedItem is NetworkStreamOutput output) { QueueLive("Remove destination", WorkingProject with { NetworkOutputs = WorkingProject.NetworkOutputs.Where(o => o.Id != output.Id).ToList() }); properties.SelectedObject = null; RefreshList(); }
-        }));
-        list.SelectedIndexChanged += (_, _) =>
-        {
-            if (list.SelectedItem is not NetworkStreamOutput output) return;
-            var bag = new LiveProperties(output.Name);
-            AddRecord(bag, "Destination", () => WorkingProject.NetworkOutputs.First(o => o.Id == output.Id), (p, value) =>
-                QueueLive("Edit destination", p with { NetworkOutputs = p.NetworkOutputs.Select(o => o.Id == output.Id ? value : o).ToList() }), ["Id"]);
-            properties.SelectedObject = bag;
-        };
-        dialog.Controls.Add(properties); dialog.Controls.Add(list); dialog.Controls.Add(buttons); RefreshList(); dialog.ShowDialog(this);
     }
 }

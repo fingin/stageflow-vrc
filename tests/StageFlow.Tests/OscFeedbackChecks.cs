@@ -10,7 +10,7 @@ internal static class OscFeedbackChecks
     private static float Value(IEnumerable<OscFeedbackValue> values, string address) => (float)values.Single(v => v.Address == address).Arguments[^1];
     public static void Defaults()
     {
-        var settings = new OscSettings(); Check(settings.Port == 9000 && settings.FeedbackPort == 9001 && !settings.FeedbackEnabled);
+        var settings = new OscSettings(); Check(settings.Port == 8000 && settings.FeedbackPort == 8001 && !settings.FeedbackEnabled);
         var a = OscMappingDefaults.Create(ControlAction.Play, []); var b = OscMappingDefaults.Create(ControlAction.Play, [a]);
         Check(a.Address == "/transport/play" && b.Address == "/transport/play/2");
         foreach (var action in Enum.GetValues<ControlAction>()) (settings with { Mappings = [OscMappingDefaults.ForAction(action)] }).Validate();

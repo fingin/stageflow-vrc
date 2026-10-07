@@ -7,6 +7,20 @@ verification, not an independent security audit or production certification.
 
 ## Findings addressed
 
+Alpha.4 adds validated RTMP publish-key/authentication fields and native encoder
+controls. The destination editor participates in live commit, persistence, undo,
+project-operation exclusion and theme updates. Removing/undoing a destination
+clears stale descriptors. Keys/passwords are masked in the UI and omitted from
+destination record display text; show/recovery JSON remains readable by design.
+Native credential length/delimiter limits fail validation instead of truncating.
+An independent challenge server verifies successful and rejected authentication.
+
+Encoding review found per-segment timestamp offsets broke B-frame continuity.
+The muxer now preserves the shared clock, and twelve native encoding cases inspect
+packet timestamps/profiles/GOPs/audio. HLS target duration accounts for keyframe
+spacing; all encoded destinations continue sharing one encoder. Full details and
+the short alpha.4 performance run are in VALIDATION.md and STREAMING.md.
+
 | Finding | Change and verification |
 |---|---|
 | Alpha.1 inspector could crash inside WinForms property expansion | Custom descriptor now returns its property owner/converter; all 15 settings sections are exercised |

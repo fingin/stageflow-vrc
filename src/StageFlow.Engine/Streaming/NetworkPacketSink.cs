@@ -62,8 +62,13 @@ public sealed unsafe class NetworkPacketSink : IDisposable
             FFmpegRuntime.Check(ffmpeg.avcodec_parameters_copy(audio->codecpar, _audio), "Configure network audio");
             video->time_base = _timeBases[0]; audio->time_base = _timeBases[1]; format->max_delay = 0;
             AVDictionary* options = null; ffmpeg.av_dict_set(&options, "rw_timeout", "3000000", 0);
+            if (_output.Protocol == NetworkStreamProtocol.Rtmp && _output.StreamKey.Length > 0)
+            {
+                ffmpeg.av_dict_set(&options, "rtmp_playpath", _output.StreamKey, 0);
+                ffmpeg.av_dict_set(&options, "rtmp_app", _output.RtmpApplication(), 0);
+            }
             Deadline();
-            try { FFmpegRuntime.Check(ffmpeg.avio_open2(&format->pb, _output.Url, ffmpeg.AVIO_FLAG_WRITE, &format->interrupt_callback, &options), "Connect network output"); }
+            try { FFmpegRuntime.Check(ffmpeg.avio_open2(&format->pb, _output.ConnectionUrl(), ffmpeg.AVIO_FLAG_WRITE, &format->interrupt_callback, &options), "Connect network output"); }
             finally { ffmpeg.av_dict_free(&options); }
             if (_output.Protocol == NetworkStreamProtocol.Rtmp) ffmpeg.av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
             else ffmpeg.av_dict_set(&options, "mpegts_flags", "+resend_headers", 0);

@@ -1,4 +1,38 @@
-# Validation log — v2 alpha.3
+# Validation log — v2 alpha.4
+
+## Alpha.4 follow-up (October 6, Pacific)
+
+Release build: zero warnings/errors; **31/31 core checks**. UI checks cover masked
+RTMP credentials/key, separate SRT properties, live encoding edits, persistence,
+undo/redo and destination removal, plus the existing preferences/OSC/resize suite.
+
+Twelve native cases (H.264 NVENC, HEVC NVENC, x264 × CBR/VBR/capped CQ/uncapped CQ) pass with 180 video
+frames and AAC per case. Tests inspect actual packet timestamps, two-second GOPs,
+H.264 Baseline/Main/High profiles and reordering with two B-frames. HLS publishes
+three segments per case. A first-segment timestamp shift found by these checks was
+fixed by disabling automatic timestamp offsets in the per-segment muxer.
+
+An independent Node RTMP/AMF fixture accepts the production sender's Adobe-style
+challenge response and exact key (including path/query/special characters), then
+receives 212 video messages and 331 AAC messages. An incorrect password is rejected
+with zero publish/media messages. This is local RTMP verification; public hosted
+services and RTMPS certificates were not exercised.
+
+OSC new-show defaults are 8000 for commands and 8001 for feedback. Existing explicit
+project ports survive loading.
+
+The 60-second application smoke run used the supplied Sample Show layout,
+2560×1440 at 60 fps, three dynamic Art-Net universes, twelve additional clocks,
+MP4 playback, Spout output and HLS/AAC. After warmup, 45.02 measured seconds produced
+2,700 frames with **zero missed deadlines and zero audio underruns**. Mean render
+submission/wait time was 1.51 ms; peak was 5.58 ms. CPU use was 8.61% of one logical
+core; working set moved from 280.2 to 266.3 MiB. This is a short regression run,
+not a long-duration soak or a 45-universe measurement.
+
+The pre-existing grid-allocation check failed once during a rebuild/test run; an
+isolated rerun of the same compiled suite passed 31/31 with zero measured mask-loop
+allocation. The grid implementation was unchanged. This intermittent check remains
+noted rather than treated as a reproduced production regression.
 
 ## Alpha.3 follow-up (October 6, Pacific)
 

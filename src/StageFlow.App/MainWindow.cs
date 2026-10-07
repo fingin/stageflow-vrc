@@ -194,7 +194,7 @@ public sealed partial class MainWindow : Form
         _projectTitle.Text = _project.Name + (_dirty ? "  •" : "") + $"    {_project.Width} × {_project.Height} / {(double)_project.FpsNumerator / _project.FpsDenominator:0.###} fps";
         Text = $"{_project.Name}{(_dirty ? " *" : "")} — StageFlow {Program.DisplayVersion}";
         _loop.Text = _project.LoopEnabled ? "Loop: ON" : "Loop: off";
-        _binding = false; BindRoutes();
+        _binding = false; BindRoutes(); _refreshNetwork?.Invoke();
     }
     private void DrawLayerItem(object? sender, DrawItemEventArgs e)
     {

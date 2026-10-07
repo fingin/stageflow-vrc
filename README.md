@@ -1,10 +1,10 @@
-# StageFlow 2.0.0-alpha.3
+# StageFlow 2.0.0-alpha.4
 
 A Windows show workspace for video, timecode, Art-Net grids, compositing and live
 video routing. This is the independent **v2 fork**. V1 remains frozen.
 
 Launch **StageFlow.App.exe** in the portable folder (this release is in
-**StageFlow-v2-Portable-alpha.3**). Save and close the previous build before switching. The portable build bundles
+**StageFlow-v2-Portable-alpha.4**). Save and close the previous build before switching. The portable build bundles
 .NET, the native media/network libraries and the HLS player. It runs as one
 application process; OBS, MediaMTX, Hnode and an external FFmpeg process are not
 required. Existing Windows MIDI ports, including loopMIDI, remain selectable.
@@ -93,9 +93,18 @@ SRT share one encoded video/audio program. RTMP requires H.264. HEVC playback de
 on the receiver; H.264/AAC is the browser compatibility default. Per-destination
 transcoding, AMF and QSV are not implemented.
 
-For RTMP enter the complete endpoint including the stream key. For SRT use a URL
-such as srt://receiver:9001?mode=caller&latency=120000. The latency value is in
-microseconds. Destinations are stored in the show file, including any keys in URLs.
+Under **Preferences → RTMP & SRT → RTMP / SRT destinations**, add an RTMP destination
+and enter the server/application URL and separate **Stream Key**. Enable
+**Authentication Enabled** and supply username/password when the server requires
+RTMP challenge authentication. Legacy complete URLs still work with an empty key.
+Keys/passwords are masked in the editor and stored in readable show JSON.
+For SRT use a URL such as srt://receiver:9001?mode=caller&latency=120000 (microseconds).
+
+**Preferences → Encoding** controls CBR/VBR/constant quality, target/maximum bitrate,
+buffer size, preset, H.264 profile, keyframe interval, B-frames, resolution/frame rate
+and AAC bitrate. These update live and reconnect active encoded outputs. For typical
+RTMP services use H.264, CBR and a 2-second keyframe interval, following the service's
+bitrate limits. See [RTMP and encoding settings](docs/STREAMING.md) for field behavior.
 
 Default HLS player: http://127.0.0.1:8888/; playlist: /live/index.m3u8.
 **Player ↗** opens the local viewer. Remote clients use this PC's LAN address and
@@ -110,10 +119,11 @@ The main inspector has no OSC tab. Add and Remove are explicit buttons. Choose a
 mapping in the list to edit its control, trigger, target layer, range and feedback
 properties below. Changes are live and undoable. Learn captures the next command.
 
-For OSC Pilot on the same PC, enable the StageFlow receiver on port **9000** and
-feedback to **127.0.0.1:9001**. In OSC Pilot, use Send To Port **9000** and Listen On
-Port **9001**. On another computer/tablet, replace the feedback IP with that device's
+For OSC Pilot on the same PC, enable the StageFlow receiver on port **8000** and
+feedback to **127.0.0.1:8001**. In OSC Pilot, use Send To Port **8000** and Listen On
+Port **8001**. On another computer/tablet, replace the feedback IP with that device's
 LAN address. Input and feedback have independent switches and start off for old shows.
+Existing shows retain their explicitly saved ports; change those in Preferences → OSC.
 
 New mappings use unique /transport/play addresses. Changing the selected action
 sets appropriate button/fader defaults and preserves a custom address. For example,

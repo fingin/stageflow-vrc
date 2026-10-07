@@ -8,6 +8,8 @@ using StageFlow.Core.Osc;
 
 var tests = new (string Name, Action Body)[]
 {
+    ("RTMP separate keys, raw credentials, legacy URLs and validation", StreamingSettingsChecks.Destinations),
+    ("Encoding ranges, GOP timing and backward-compatible persistence", StreamingSettingsChecks.EncodingAndPersistence),
     ("OSC mapping defaults, unique addresses and feedback validation", OscFeedbackChecks.Defaults),
     ("OSC feedback tracks local transport with deduplication and refresh", OscFeedbackChecks.Transport),
     ("OSC feedback values, inverse ranges, targets and wire types", OscFeedbackChecks.Values),

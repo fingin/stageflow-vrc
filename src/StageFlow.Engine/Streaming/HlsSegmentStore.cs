@@ -19,7 +19,7 @@ public sealed class HlsSegmentStore
     {
         if (playlistLength is < 3 or > 30 || maxBytes < 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(playlistLength));
         _playlistLength = playlistLength; _maxBytes = maxBytes;
-        if (!double.IsFinite(targetSeconds) || targetSeconds is < 0.5 or > 10) throw new ArgumentOutOfRangeException(nameof(targetSeconds));
+        if (!double.IsFinite(targetSeconds) || targetSeconds is < 0.5 or > 30) throw new ArgumentOutOfRangeException(nameof(targetSeconds));
         _targetDuration = (int)Math.Ceiling(targetSeconds);
     }
     public long Bytes { get { lock (_gate) return _bytes; } }

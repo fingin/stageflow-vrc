@@ -24,10 +24,10 @@ public sealed record OscSettings
 {
     public bool Enabled { get; init; }
     public string BindAddress { get; init; } = "0.0.0.0";
-    public int Port { get; init; } = 9000;
+    public int Port { get; init; } = 8000;
     public bool FeedbackEnabled { get; init; }
     public string FeedbackHost { get; init; } = "127.0.0.1";
-    public int FeedbackPort { get; init; } = 9001;
+    public int FeedbackPort { get; init; } = 8001;
     public int FeedbackIntervalMilliseconds { get; init; } = 100;
     public int FeedbackRefreshSeconds { get; init; } = 2;
     public List<OscMapping> Mappings { get; init; } = [];

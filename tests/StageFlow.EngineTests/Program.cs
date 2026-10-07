@@ -11,6 +11,8 @@ string nativeDirectory = Environment.GetEnvironmentVariable("STAGEFLOW_NATIVE") 
 if (args.Length == 1 && args[0] == "--protocols") { ProtocolChecks.Run(nativeDirectory); return; }
 if (args.Length == 2 && args[0] == "--network") { ProtocolChecks.Network(nativeDirectory, args[1]); return; }
 if (args.Length == 1 && args[0] == "--srt-loopback") { ProtocolChecks.SrtLoopback(nativeDirectory); return; }
+if (args.Length == 2 && args[0] == "--encoding") { EncodingChecks.Run(nativeDirectory, args[1]); return; }
+if (args.Length == 2 && args[0] == "--network-project") { ProtocolChecks.NetworkProject(nativeDirectory, args[1]); return; }
 
 if (args.Length == 1 && args[0] == "--runtime-info")
 {

@@ -33,6 +33,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     public long AudioSamples => _audioPts;
     public HardwareStreamEncoder(GpuDevice gpu, HlsSegmentStore store, int width, int height, int fpsNum, int fpsDen, StreamSettings settings, IEnumerable<NetworkStreamOutput>? outputs = null)
     {
+        settings.Validate();
         _gpu = gpu; _software = settings.Encoder == "libx264";
         try
         {
@@ -46,10 +47,15 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _video->pix_fmt = _software ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_D3D11;
             _video->flags |= ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER;
             if (_software) _video->thread_count = Math.Clamp(Environment.ProcessorCount / 4, 1, 8);
-            _video->bit_rate = settings.VideoBitrateKbps * 1000L;
-            _video->rc_max_rate = _video->bit_rate; _video->rc_buffer_size = settings.VideoBitrateKbps * 1000;
-            _video->gop_size = Math.Max(1, (int)Math.Round((double)fpsNum / fpsDen * settings.SegmentSeconds));
-            _video->max_b_frames = 0;
+            bool qualityMode = settings.RateControl == VideoRateControl.ConstantQuality;
+            long maximum = (settings.RateControl == VideoRateControl.Cbr || settings.MaxBitrateKbps == 0
+                ? settings.VideoBitrateKbps : settings.MaxBitrateKbps) * 1000L;
+            _video->bit_rate = qualityMode ? 0 : settings.VideoBitrateKbps * 1000L;
+            _video->rc_min_rate = settings.RateControl == VideoRateControl.Cbr ? _video->bit_rate : 0;
+            _video->rc_max_rate = qualityMode && settings.MaxBitrateKbps == 0 ? 0 : maximum;
+            _video->rc_buffer_size = (int)Math.Round(_video->rc_max_rate * settings.BufferSeconds);
+            _video->gop_size = settings.GopFrames(fpsNum, fpsDen);
+            _video->max_b_frames = settings.BFrames;
             _video->colorspace = AVColorSpace.AVCOL_SPC_BT709;
             _video->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
             _video->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
@@ -71,14 +77,32 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
             _converter = new(gpu, width, height, fpsNum, fpsDen);
             if (!_software) _video->hw_frames_ctx = ffmpeg.av_buffer_ref(_frames);
             AVDictionary* options = null;
-            ffmpeg.av_dict_set(&options, "preset", _software ? "veryfast" : "p3", 0);
-            ffmpeg.av_dict_set(&options, "tune", _software ? "zerolatency" : "ull", 0);
+            string preset = settings.Preset switch { EncodingPreset.Balanced => _software ? "faster" : "p4", EncodingPreset.Quality => _software ? "medium" : "p6", _ => _software ? "veryfast" : "p3" };
+            ffmpeg.av_dict_set(&options, "preset", preset, 0);
+            if (settings.Encoder != "hevc_nvenc" && settings.Profile != H264Profile.Auto)
+                ffmpeg.av_dict_set(&options, "profile", settings.Profile.ToString().ToLowerInvariant(), 0);
+            if (_software)
+            {
+                if (settings.BFrames == 0) ffmpeg.av_dict_set(&options, "tune", "zerolatency", 0);
+                ffmpeg.av_dict_set(&options, "forced-idr", "1", 0);
+                ffmpeg.av_dict_set(&options, "sc_threshold", "0", 0);
+                ffmpeg.av_dict_set(&options, "x264-params", "open-gop=0:rc-lookahead=0:sync-lookahead=0" + (settings.RateControl == VideoRateControl.Cbr ? ":nal-hrd=cbr:filler=1" : ""), 0);
+                if (qualityMode) ffmpeg.av_dict_set_int(&options, "crf", settings.Quality, 0);
+            }
             if (!_software)
             {
-                ffmpeg.av_dict_set(&options, "rc", "cbr", 0); ffmpeg.av_dict_set(&options, "zerolatency", "1", 0);
+                ffmpeg.av_dict_set(&options, "tune", settings.BFrames == 0 ? "ull" : "hq", 0);
+                ffmpeg.av_dict_set(&options, "rc", settings.RateControl == VideoRateControl.Cbr ? "cbr" : "vbr", 0);
+                ffmpeg.av_dict_set(&options, "zerolatency", settings.BFrames == 0 ? "1" : "0", 0);
+                ffmpeg.av_dict_set(&options, "no-scenecut", "1", 0);
+                if (qualityMode) ffmpeg.av_dict_set_int(&options, "cq", settings.Quality, 0);
                 ffmpeg.av_dict_set(&options, "forced-idr", "1", 0);
             }
-            try { FFmpegRuntime.Check(ffmpeg.avcodec_open2(_video, videoCodec, &options), "Open hardware video encoder"); }
+            try
+            {
+                FFmpegRuntime.Check(ffmpeg.avcodec_open2(_video, videoCodec, &options), "Open video encoder");
+                if (ffmpeg.av_dict_count(options) != 0) throw new InvalidOperationException("The video encoder did not accept all selected settings.");
+            }
             finally { ffmpeg.av_dict_free(&options); }
             AVCodec* audioCodec = ffmpeg.avcodec_find_encoder(AVCodecID.AV_CODEC_ID_AAC);
             if (audioCodec == null) throw new NotSupportedException("AAC encoder is unavailable.");

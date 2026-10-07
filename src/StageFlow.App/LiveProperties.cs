@@ -9,14 +9,14 @@ internal sealed class LiveProperties(string name) : CustomTypeDescriptor
     public override string GetComponentName() => name;
     public override object GetPropertyOwner(PropertyDescriptor? pd) => this;
     public override TypeConverter GetConverter() => new ExpandableObjectConverter();
-    public void Add(string key, string category, Type type, Func<object?> get, Action<object?>? set, string description = "", string[]? options = null)
-        => _rows.Add(new LiveProperty(key, category, type, get, set, description, options));
+    public void Add(string key, string category, Type type, Func<object?> get, Action<object?>? set, string description = "", string[]? options = null, bool secret = false)
+        => _rows.Add(new LiveProperty(key, category, type, get, set, description, options, secret));
     public void Include(string section, PropertyDescriptor property, object owner) => _rows.Add(new SearchProperty(section, property, owner));
     public override PropertyDescriptorCollection GetProperties() => GetProperties(null);
     public override PropertyDescriptorCollection GetProperties(Attribute[]? attributes) => new(_rows.Where(p =>
         string.IsNullOrWhiteSpace(Filter) || p.DisplayName.Contains(Filter, StringComparison.OrdinalIgnoreCase) || p.Category.Contains(Filter, StringComparison.OrdinalIgnoreCase) || p.Description.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray());
     private sealed class SearchProperty(string section, PropertyDescriptor property, object owner)
-        : PropertyDescriptor(section + "." + property.Name, [new CategoryAttribute(section), new DescriptionAttribute(property.Description)])
+        : PropertyDescriptor(section + "." + property.Name, [new CategoryAttribute(section), new DescriptionAttribute(property.Description), property.Attributes[typeof(PasswordPropertyTextAttribute)] ?? PasswordPropertyTextAttribute.No])
     {
         public override string DisplayName => property.DisplayName;
         public override Type ComponentType => typeof(LiveProperties);
@@ -30,10 +30,16 @@ internal sealed class LiveProperties(string name) : CustomTypeDescriptor
         public override void ResetValue(object component) { }
         public override bool ShouldSerializeValue(object component) => false;
     }
-    private sealed class LiveProperty(string key, string category, Type type, Func<object?> get, Action<object?>? set, string description, string[]? options)
-        : PropertyDescriptor(key, [new CategoryAttribute(category), new DescriptionAttribute(description)])
+    private sealed class LiveProperty(string key, string category, Type type, Func<object?> get, Action<object?>? set, string description, string[]? options, bool secret)
+        : PropertyDescriptor(key, [new CategoryAttribute(category), new DescriptionAttribute(description), new PasswordPropertyTextAttribute(secret)])
     {
-        public override string DisplayName => System.Text.RegularExpressions.Regex.Replace(Name, "(?<=[a-z0-9])([A-Z])", " $1");
+        public override string DisplayName => Name switch
+        {
+            "Url" => "Server URL", "BFrames" => "B-frames", "VideoBitrateKbps" => "Video bitrate (kbps)",
+            "MaxBitrateKbps" => "Maximum bitrate (kbps)", "AudioBitrateKbps" => "Audio bitrate (kbps)",
+            "KeyframeSeconds" => "Keyframe interval (seconds)", "BufferSeconds" => "Buffer size (seconds)",
+            _ => System.Text.RegularExpressions.Regex.Replace(Name, "(?<=[a-z0-9])([A-Z])", " $1")
+        };
         public override Type ComponentType => typeof(LiveProperties);
         public override Type PropertyType => type;
         public override bool IsReadOnly => set == null;

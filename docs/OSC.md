@@ -1,4 +1,4 @@
-# OSC commands and feedback — v2 alpha.3
+# OSC commands and feedback — v2 alpha.4
 
 ## Configure the connection
 
@@ -10,9 +10,9 @@ feedback remains off until enabled.
 | Setting | StageFlow default | OSC Pilot on the same PC |
 |---|---|---|
 | Command interface | 0.0.0.0 | Send to 127.0.0.1 |
-| Command input port | 9000 | Send To Port 9000 |
+| Command input port | 8000 | Send To Port 8000 |
 | Feedback destination | 127.0.0.1 | This PC |
-| Feedback destination port | 9001 | Listen On Port 9001 |
+| Feedback destination port | 8001 | Listen On Port 8001 |
 | Feedback update interval | 100 ms / 10 Hz | — |
 | Full state refresh | Every 2 seconds | — |
 
@@ -72,7 +72,7 @@ Feedback Argument inserts float-zero padding before the selected outgoing argume
 The encoder follows [OSC wire encoding](https://opensoundcontrol.stanford.edu/spec-1_0.html).
 
 Example: keep /project/record as your button address and map it to Play. With
-feedback enabled and that widget listening on port 9001, local playback changes
+feedback enabled and that widget listening on port 8001, local playback changes
 send 1/0 back to /project/record. Actual state is reported even when a command cannot
 change playback (for example while following incoming MTC). If a controller echoes
 received messages as commands, use a distinct feedback address for its indicator.

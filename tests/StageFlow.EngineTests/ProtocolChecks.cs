@@ -41,11 +41,16 @@ internal static unsafe class ProtocolChecks
         Console.WriteLine("PASS GPU staging ring: " + output.Status);
     }
     public static void Network(string nativeDirectory, string url)
+        => NetworkOutput(nativeDirectory, new() { Enabled = true, Url = url, Protocol = url.StartsWith("srt:") ? NetworkStreamProtocol.Srt : NetworkStreamProtocol.Rtmp }, new() { HlsEnabled = false, VideoBitrateKbps = 2000 });
+    public static void NetworkProject(string nativeDirectory, string path)
+    {
+        var project = ProjectStore.Load(path); NetworkOutput(nativeDirectory, project.NetworkOutputs.Single(), project.Stream);
+    }
+    private static void NetworkOutput(string nativeDirectory, NetworkStreamOutput output, StreamSettings settings)
     {
         FFmpegRuntime.Initialize(nativeDirectory); ProtocolRuntime.Initialize(nativeDirectory);
         using var gpu = new GpuDevice(); using var canvas = new GpuSurface(gpu, 640, 360);
-        using var encoder = new HardwareStreamEncoder(gpu, new HlsSegmentStore(), 640, 360, 30, 1, new() { HlsEnabled = false, VideoBitrateKbps = 2000 },
-            [new() { Enabled = true, Url = url, Protocol = url.StartsWith("srt:") ? NetworkStreamProtocol.Srt : NetworkStreamProtocol.Rtmp }]);
+        using var encoder = new HardwareStreamEncoder(gpu, new HlsSegmentStore(), 640, 360, 30, 1, settings, [output]);
         float[] audio = new float[3200]; bool connected = false;
         for (int frame = 0; frame < 210; frame++)
         {

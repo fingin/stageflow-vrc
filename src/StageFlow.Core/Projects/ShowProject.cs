@@ -52,9 +52,7 @@ public sealed record ShowProject
             throw new InvalidDataException("Invalid Art-Net bind address or port.");
         if (ArtNet.FirstUniverse < 0 || ArtNet.UniverseCount is < 1 or > 512 || ArtNet.FirstUniverse + ArtNet.UniverseCount > 32768)
             throw new InvalidDataException("Invalid Art-Net universe range.");
-        if (Stream.Port is < 1 or > 65535 || Stream.VideoBitrateKbps is < 500 or > 200000 || Stream.AudioBitrateKbps is < 32 or > 512 ||
-            !double.IsFinite(Stream.SegmentSeconds) || Stream.SegmentSeconds is < 0.5 or > 10 || Stream.PlaylistSegments is < 3 or > 20 ||
-            !System.Net.IPAddress.TryParse(Stream.BindAddress, out _) || Stream.Encoder is not ("h264_nvenc" or "hevc_nvenc" or "libx264")) throw new InvalidDataException("Invalid streaming settings or unsupported encoder.");
+        Stream.Validate();
         if (!float.IsFinite(Audio.LocalVolume) || !float.IsFinite(Audio.StreamVolume) || Audio.LocalVolume is < 0 or > 2 || Audio.StreamVolume is < 0 or > 2 ||
             Audio.OffsetMilliseconds is < -5000 or > 5000 || Clock.OutputOffsetMilliseconds is < -5000 or > 5000 || Math.Abs((double)Clock.OffsetFrames) > 2592000)
             throw new InvalidDataException("Invalid audio gain or timing offset.");
@@ -148,9 +146,46 @@ public sealed record StreamSettings
     public string Encoder { get; init; } = "h264_nvenc";
     public int VideoBitrateKbps { get; init; } = 12000;
     public int AudioBitrateKbps { get; init; } = 192;
+    public VideoRateControl RateControl { get; init; } = VideoRateControl.Cbr;
+    public int MaxBitrateKbps { get; init; } // 0 = target bitrate
+    public double BufferSeconds { get; init; } = 1;
+    public int Quality { get; init; } = 23;
+    public EncodingPreset Preset { get; init; } = EncodingPreset.Performance;
+    public H264Profile Profile { get; init; } = H264Profile.Auto;
+    public double KeyframeSeconds { get; init; } // 0 = follow HLS segment duration (legacy behavior)
+    public int BFrames { get; init; }
     public double SegmentSeconds { get; init; } = 1;
     public int PlaylistSegments { get; init; } = 6;
+    public int GopFrames(int fpsNumerator, int fpsDenominator) => Math.Max(1, (int)Math.Round(
+        (double)fpsNumerator / fpsDenominator * (KeyframeSeconds == 0 ? SegmentSeconds : KeyframeSeconds)));
+    // Segments end on the next IDR. Account for frame-rate rounding and reordered frames.
+    public double HlsTargetSeconds(int fpsNumerator, int fpsDenominator)
+    {
+        double frame = (double)fpsDenominator / fpsNumerator, gop = GopFrames(fpsNumerator, fpsDenominator) * frame;
+        return Math.Max(0.5, Math.Ceiling(SegmentSeconds * 0.8 / gop) * gop + BFrames * frame);
+    }
+    public void Validate()
+    {
+        if (Port is < 1 or > 65535 || VideoBitrateKbps is < 500 or > 200000 || AudioBitrateKbps is < 32 or > 512 ||
+            !double.IsFinite(SegmentSeconds) || SegmentSeconds is < 0.5 or > 10 || PlaylistSegments is < 3 or > 20 ||
+            !System.Net.IPAddress.TryParse(BindAddress, out _) || Encoder is not ("h264_nvenc" or "hevc_nvenc" or "libx264"))
+            throw new InvalidDataException("Invalid streaming settings or unsupported encoder.");
+        if (!Enum.IsDefined(RateControl) || !Enum.IsDefined(Preset) || !Enum.IsDefined(Profile) || Quality is < 0 or > 51 ||
+            MaxBitrateKbps is < 0 or > 200000 || MaxBitrateKbps is > 0 and < 500 ||
+            !double.IsFinite(BufferSeconds) || BufferSeconds is < 0.1 or > 10 ||
+            !double.IsFinite(KeyframeSeconds) || KeyframeSeconds < 0 || KeyframeSeconds > 10 || KeyframeSeconds is > 0 and < 0.5 || BFrames is < 0 or > 4)
+            throw new InvalidDataException("Invalid encoder rate control, quality, buffer, preset, profile, keyframe interval or B-frame count.");
+        if (RateControl == VideoRateControl.Vbr && MaxBitrateKbps > 0 && MaxBitrateKbps < VideoBitrateKbps)
+            throw new InvalidDataException("VBR maximum bitrate must be at least the target bitrate (or zero to use the target).");
+        if (Profile == H264Profile.Baseline && Encoder != "hevc_nvenc" && BFrames != 0)
+            throw new InvalidDataException("H.264 Baseline does not support B-frames. Select Main/High or set B-frames to zero.");
+        if (Encoder == "libx264" && RateControl == VideoRateControl.ConstantQuality && Quality == 0 && Profile != H264Profile.Auto)
+            throw new InvalidDataException("Lossless x264 (CRF 0) requires Auto profile. Use quality 1–51 with a fixed H.264 profile.");
+    }
 }
+public enum VideoRateControl { Cbr, Vbr, ConstantQuality }
+public enum EncodingPreset { Performance, Balanced, Quality }
+public enum H264Profile { Auto, Baseline, Main, High }
 public enum LayerKind { Video, Grid, Timecode, Spout, Network }
 public enum NetworkSourceProtocol { Ndi, Omt, Srt }
 public sealed record Layer

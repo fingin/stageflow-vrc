@@ -75,6 +75,9 @@ public sealed unsafe class TsSegmentMuxer : IDisposable
         AVIOContext* io = null;
         FFmpegRuntime.Check(ffmpeg.avio_open_dyn_buf(&io), "Allocate HLS segment buffer"); _format->pb = io;
         _format->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO; _format->max_delay = 0;
+        // A per-segment automatic shift would move only the first segment's negative
+        // B-frame/AAC timestamps and make the next segment jump backward.
+        _format->avoid_negative_ts = ffmpeg.AVFMT_AVOID_NEG_TS_DISABLED;
         AVDictionary* options = null;
         ffmpeg.av_dict_set(&options, "mpegts_copyts", "1", 0);
         ffmpeg.av_dict_set(&options, "mpegts_flags", "+resend_headers", 0);

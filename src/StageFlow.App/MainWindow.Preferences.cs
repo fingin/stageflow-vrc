@@ -100,7 +100,13 @@ public sealed partial class MainWindow
             case "Video & canvas": AddRecord(bag, "Program format", () => WorkingProject, (_,v) => QueueLive("Edit canvas", v), include: ["Name", "Width", "Height", "FpsNumerator", "FpsDenominator", "GpuAdapter"]); break;
             case "Art-Net": AddRecord(bag, "Art-Net receiver", () => WorkingProject.ArtNet, (p,v) => QueueLive("Edit Art-Net", p with { ArtNet = v }), ["HoldLastSeconds"]); break;
             case "MIDI-DMX": AddRecord(bag, "Gridnode MIDI-DMX", () => WorkingProject.MidiDmx, (p,v) => QueueLive("Edit MIDI-DMX", p with { MidiDmx = v })); break;
-            case "Encoding": AddRecord(bag, "Shared HLS / RTMP / SRT encoder", () => WorkingProject.Stream, (p,v) => QueueLive("Edit encoding", p with { Stream = v }), include: ["Encoder", "VideoBitrateKbps", "AudioBitrateKbps", "SegmentSeconds"]); break;
+            case "Encoding":
+                AddRecord(bag, "01 · Video encoder", () => WorkingProject.Stream, (p,v) => QueueLive("Edit encoding", p with { Stream = v }),
+                    include: ["Encoder", "RateControl", "VideoBitrateKbps", "MaxBitrateKbps", "BufferSeconds", "Quality", "Preset", "Profile", "KeyframeSeconds", "BFrames"]);
+                AddRecord(bag, "02 · Output format", () => WorkingProject, (_,v) => QueueLive("Edit canvas", v), include: ["Width", "Height", "FpsNumerator", "FpsDenominator"]);
+                AddRecord(bag, "03 · Program audio", () => WorkingProject.Stream, (p,v) => QueueLive("Edit encoding", p with { Stream = v }), include: ["AudioBitrateKbps"]);
+                bag.Add("Audio format", "03 · Program audio", typeof(string), () => "AAC · 48 kHz · stereo", null, "Program audio is included in HLS, RTMP and SRT.");
+                break;
             case "HLS server": AddRecord(bag, "Built-in HLS server", () => WorkingProject.Stream, (p,v) => QueueLive("Edit HLS", p with { Stream = v }), include: ["HlsEnabled", "BindAddress", "Port", "SegmentSeconds", "PlaylistSegments"]); break;
             case "Spout": AddRecord(bag, "Spout sender", () => WorkingProject.Spout, (p,v) => QueueLive("Edit Spout", p with { Spout = v })); break;
             case "NDI & OMT": AddRecord(bag, "LAN program outputs", () => WorkingProject.LanVideo, (p,v) => QueueLive("Edit LAN outputs", p with { LanVideo = v })); break;

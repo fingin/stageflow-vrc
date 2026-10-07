@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.0-alpha.4 — 2026-10-06 (Pacific)
+
+- Set new-show OSC command/feedback defaults to 8000/8001; preserve saved custom ports.
+- Add separate RTMP server URL, stream key and optional username/password authentication
+  in the live destination editor. Mask keys/passwords, preserve legacy full URLs,
+  and keep RTMP-only fields out of SRT destinations.
+- Expose CBR/VBR/constant quality, target/maximum bitrate, VBV buffer, performance/quality
+  presets, H.264 profile, keyframe interval and B-frames in Encoding Preferences.
+  Include shared output dimensions/frame rate and AAC bitrate/format in the same page.
+- Keep a single shared encode for HLS/RTMP/SRT. Compute HLS target duration from GOP
+  timing, and preserve continuous timestamps across segments with reordered frames.
+- Verify native encoder settings across twelve codec/rate-control cases, live
+  editor persistence/undo, and independent RTMP challenge authentication with positive
+  and rejected-password cases.
+
 ## 2.0.0-alpha.3 — 2026-10-06 (Pacific)
 
 - Move OSC entirely into Preferences, with separate connection and mapping sections.
