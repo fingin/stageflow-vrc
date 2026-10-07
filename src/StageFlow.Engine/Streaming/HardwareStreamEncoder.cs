@@ -22,6 +22,7 @@ public sealed unsafe class HardwareStreamEncoder : IDisposable
     private AVFrame* _softwareFrame;
     private readonly bool _software;
     public string NetworkStatus => string.Join(" · ", _network.Select(n => n.Name + ": " + n.Status));
+    public StageFlow.Core.Monitoring.VideoRouteTelemetry[] NetworkTelemetry() => _network.Select(n => n.Snapshot()).ToArray();
     private GpuEncoderConverter? _converter;
     private long _videoPts, _audioPts;
     private int _audioFilled;

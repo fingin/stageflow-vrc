@@ -87,7 +87,7 @@ public sealed partial class MainWindow
         controls.Controls.Add(Theme.Button("◀ Frame", (_, _) => _engine?.StepFrame(-1))); controls.Controls.Add(Theme.Button("Frame ▶", (_, _) => _engine?.StepFrame(1)));
         controls.Controls.Add(Theme.Button("In [I]", async (_, _) => await SetLoopPoint(false))); controls.Controls.Add(Theme.Button("Out [O]", async (_, _) => await SetLoopPoint(true))); controls.Controls.Add(_loop);
         controls.Controls.Add(Theme.Label("Go to", true)); _goto.Width = 122; _goto.Margin = new Padding(5, 9, 5, 0); controls.Controls.Add(_goto); controls.Controls.Add(Theme.Button("Go", (_, _) => GoTo()));
-        controls.Controls.Add(Theme.Button("Player ↗", (_, _) => OpenExternal($"http://127.0.0.1:{_project.Stream.Port}/"))); controls.Controls.Add(Theme.Button("Snapshot", async (_, _) => await SaveFrame())); timeline.Controls.Add(controls, 0, 2);
+        controls.Controls.Add(Theme.Button("Player ↗", (_, _) => OpenExternal(StageFlow.Core.Monitoring.VideoMonitor.HlsLinks(_project.Stream, []).First().Url))); controls.Controls.Add(Theme.Button("Snapshot", async (_, _) => await SaveFrame())); timeline.Controls.Add(controls, 0, 2);
         transport.Controls.Add(timeline); root.Controls.Add(transport, 0, 2);
         _status.AutoSize = false; _status.AutoEllipsis = true; _status.Dock = DockStyle.Fill; _status.Margin = Padding.Empty; _status.TextAlign = ContentAlignment.MiddleLeft; root.Controls.Add(_status, 0, 3);
         _layers.BackColor = _markers.BackColor = Theme.Panel; _layers.ForeColor = _markers.ForeColor = Theme.Text; _timeline.BackColor = Theme.Panel;

@@ -4,6 +4,7 @@ using System.Net;
 using System.Numerics;
 using StageFlow.Core.ArtNet;
 using StageFlow.Core.Projects;
+using StageFlow.Core.Monitoring;
 using StageFlow.Core.Timing;
 using StageFlow.Engine.Audio;
 using StageFlow.Engine.Graphics;
@@ -19,11 +20,11 @@ namespace StageFlow.Engine;
 public sealed record EngineStatus(string Gpu, double RenderMilliseconds, long RenderedFrames, long MissedDeadlines,
     bool Streaming, string? StreamUrl, long ArtNetPackets, long AudioUnderruns, string? Error, string? MediaError,
     string MidiDmx = "Off", string? SpoutOutput = null, string? SpoutStatus = null, double MeanRenderMilliseconds = 0, double PeakRenderMilliseconds = 0,
-    string? PhaseMilliseconds = null, string? NetworkStatus = null);
+    string? PhaseMilliseconds = null, string? NetworkStatus = null, VideoTelemetry? Video = null);
 public sealed record SlowFrame(DateTime Utc, double Milliseconds, int MissedBefore, double[] PhaseMilliseconds, int Gc0, int Gc1, int Gc2);
 
 /// <summary>Owns native resource lifetime and presentation. GUI communicates through commands and immutable projects.</summary>
-public sealed class ShowEngine : IDisposable
+public sealed partial class ShowEngine : IDisposable
 {
     private sealed record WorkerCommand(Action Action, TaskCompletionSource Completion);
     private readonly ConcurrentQueue<WorkerCommand> _commands = new();
@@ -155,18 +156,22 @@ public sealed class ShowEngine : IDisposable
     { _media?.Dispose(); _media = null; _video = null; _project = _project with { MediaPath = null }; Transport.Load(TimeSpan.FromHours(24)); _localAudio?.Flush(); });
     public Task StartStreamAsync() => Command(() =>
     {
-        if (_encoder != null) return;
-        var settings = _project.Stream;
-        var store = new HlsSegmentStore(settings.PlaylistSegments, targetSeconds: settings.HlsTargetSeconds(_project.FpsNumerator, _project.FpsDenominator));
-        if (!settings.HlsEnabled && !_project.NetworkOutputs.Any(o => o.Enabled)) throw new InvalidOperationException("Enable HLS or a network stream destination first.");
-        var encoder = new HardwareStreamEncoder(_gpu!, store, _project.Width, _project.Height, _project.FpsNumerator, _project.FpsDenominator, settings, _project.NetworkOutputs);
-        var server = new HlsServer();
-        try { if (settings.HlsEnabled) server.StartAsync(store, IPAddress.Parse(settings.BindAddress), settings.Port, _webAssets).GetAwaiter().GetResult(); }
-        catch { encoder.Dispose(); server.DisposeAsync().AsTask().GetAwaiter().GetResult(); throw; }
-        _segments = store; _encoder = encoder; _server = server; _streamStartTick = -1;
-        _streamUrl = settings.HlsEnabled ? $"http://127.0.0.1:{settings.Port}/live/index.m3u8" : null; _error = null;
+        try
+        {
+            if (_encoder != null) return;
+            var settings = _project.Stream;
+            var store = new HlsSegmentStore(settings.PlaylistSegments, targetSeconds: settings.HlsTargetSeconds(_project.FpsNumerator, _project.FpsDenominator));
+            if (!settings.HlsEnabled && !_project.NetworkOutputs.Any(o => o.Enabled)) throw new InvalidOperationException("Enable HLS or a network stream destination first.");
+            var encoder = new HardwareStreamEncoder(_gpu!, store, _project.Width, _project.Height, _project.FpsNumerator, _project.FpsDenominator, settings, _project.NetworkOutputs);
+            var server = new HlsServer();
+            try { if (settings.HlsEnabled) server.StartAsync(store, IPAddress.Parse(settings.BindAddress), settings.Port, _webAssets).GetAwaiter().GetResult(); }
+            catch { encoder.Dispose(); server.DisposeAsync().AsTask().GetAwaiter().GetResult(); throw; }
+            _segments = store; _encoder = encoder; _server = server; _streamStartTick = -1;
+            _streamUrl = settings.HlsEnabled ? VideoMonitor.HlsLinks(settings, []).First().Url + "live/index.m3u8" : null; _error = null; _streamError = null;
+        }
+        catch (Exception ex) { _streamError = ex.Message; throw; }
     });
-    public Task StopStreamAsync() => Command(StopStreaming);
+    public Task StopStreamAsync() => Command(() => { StopStreaming(); _streamError = null; });
     public Task SaveFrameAsync(string path) => Command(() => FrameCapture.SavePng(_gpu!, _canvas!, path));
     private void StopStreaming()
     {
@@ -305,7 +310,7 @@ public sealed class ShowEngine : IDisposable
             {
                 while (_commands.TryDequeue(out var command))
                 {
-                    try { command.Action(); command.Completion.TrySetResult(); }
+                    try { command.Action(); _monitorUpdated = 0; command.Completion.TrySetResult(); }
                     catch (Exception ex) { _error = ex.Message; command.Completion.TrySetException(ex); }
                 }
                 double interval = Stopwatch.Frequency * (double)_project.FpsDenominator / _project.FpsNumerator;
@@ -316,7 +321,7 @@ public sealed class ShowEngine : IDisposable
                 next += elapsedFrames * interval;
                 _outputTick += elapsedFrames - 1;
                 if (elapsedFrames * interval > Stopwatch.Frequency * 0.45 && _encoder != null && _streamStartTick >= 0)
-                { _error = "Stream stopped: the render device stalled for more than 450 ms. Reduce output load before restarting."; StopStreaming(); }
+                { _error = _streamError = "Stream stopped: the render device stalled for more than 450 ms. Reduce output load before restarting."; StopStreaming(); }
                 if (_streamStartTick == -1) { _streamStartTick = _outputTick; elapsedFrames = 1; }
                 long began = Stopwatch.GetTimestamp();
                 Render(elapsedFrames); _outputTick++;
@@ -330,10 +335,11 @@ public sealed class ShowEngine : IDisposable
                         _dmx?.Accepted ?? 0, _media?.AudioUnderruns ?? 0, _error ?? _artNetError ?? _localAudioError ?? _mtcOut?.Error ?? _mtcIn?.Error ?? _midiDmx?.Error ?? _artnet?.LastError ?? _localAudio?.Error, _media?.Error,
                         _midiDmx?.Status ?? "Off", _spoutOut?.Name, _spoutInputs.Values.Select(s => s.Error).FirstOrDefault(s => s != null), _renderTotal / _frames, _renderPeak,
                         string.Join(", ", _phaseTotal.Select((sum, i) => $"{new[] { "video", "layers", "spout", "audio", "encode", "preview" }[i]}={sum / _frames:0.000}")) + " encoder(pool/copy/send/drain/audio)=" + _encoder?.TimingSummary,
-                        _encoder?.NetworkStatus + " " + _lanOutput?.Status + "\n" + string.Join("\n", _networkInputs.Values.Select(input => $"{input.Protocol} in: {input.Frames} frames · {input.Error ?? (input.Frames > 0 ? "receiving" : "waiting for source")}"))));
+                        _encoder?.NetworkStatus + " " + _lanOutput?.Status + "\n" + string.Join("\n", _networkInputs.Values.Select(input => $"{input.Protocol} in: {input.Frames} frames · {input.Error ?? (input.Frames > 0 ? "receiving" : "waiting for source")}")), CaptureVideoTelemetry()));
             }
         }
-        catch (Exception ex) { _error = ex.ToString(); _ready.TrySetException(ex); Volatile.Write(ref _status, _status with { Error = _error }); }
+        catch (Exception ex) { _error = ex.ToString(); _ready.TrySetException(ex); Volatile.Write(ref _status, _status with { Error = _error, Streaming = false, StreamUrl = null,
+            Video = new(false, _streamError, 0, 0, [], ex.Message) }); }
         finally
         {
             lock (_lifecycle)
@@ -455,7 +461,7 @@ public sealed class ShowEngine : IDisposable
         if (_encoder != null)
         {
             try { _encoder.SubmitVideo(_canvas, _outputTick - _streamStartTick); _encoder.SubmitAudio(pcm, _project.Audio.StreamMute ? 0 : _project.Audio.StreamVolume); }
-            catch (Exception ex) { _error = $"Stream stopped: {ex.Message}"; StopStreaming(); }
+            catch (Exception ex) { _error = _streamError = $"Stream stopped: {ex.Message}"; StopStreaming(); }
         }
         RecordPhase(4, ref phase);
         if ((_frames & 1) == 0)

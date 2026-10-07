@@ -184,6 +184,31 @@ internal static class Program
                 if (Descendants(window.OwnedForms.Single(f => f.Text.EndsWith("Preferences"))).OfType<DataGridView>().Single().Rows.Count != 1) throw new Exception("Reopening preferences lost OSC mappings.");
                 window.OwnedForms.Single(f => f.Text.EndsWith("Preferences")).Close();
                 Console.WriteLine("PASS: OSC Preferences add/remove, action defaults, custom addresses, undo/redo, reopen and actual local-edit UDP feedback.");
+                var monitorTabs = Descendants(window).OfType<WorkspaceTabs>().Single(); monitorTabs.SelectedIndex = 1;
+                var publish = new StageFlow.Core.Projects.NetworkStreamOutput { Enabled = true, Url = "rtmp://example.test/live", StreamKey = "private-fixture-key", Password = "private-fixture-password" };
+                var monitorProject = window.WorkingProject with { NetworkOutputs = [publish] };
+                var telemetry = new StageFlow.Core.Monitoring.VideoTelemetry(true, null, 120, 96000,
+                    [new("hls", StageFlow.Core.Monitoring.VideoRouteState.Live, Frames: 5, Bytes: 65536), new(publish.Id.ToString(), StageFlow.Core.Monitoring.VideoRouteState.Error, Error: "Fixture connection failed")]);
+                window.RenderMonitor(monitorProject, telemetry);
+                var monitorGrid = Descendants(window).OfType<DataGridView>().Single(g => g.Name == "MonitorRoutes");
+                var monitorDetail = Descendants(window).OfType<RichTextBox>().Single(r => r.Name == "MonitorDetail");
+                var monitorLinks = Descendants(window).OfType<ComboBox>().Single(c => c.Name == "MonitorLinks");
+                var openLink = Descendants(window).OfType<Button>().Single(b => b.Text == "Open link");
+                if (monitorGrid.CurrentRow?.Tag as string != "hls" || monitorLinks.SelectedItem == null) throw new Exception("Monitor did not select the HLS links on first open.");
+                monitorGrid.CurrentCell = monitorGrid.Rows.Cast<DataGridViewRow>().Single(r => (string)r.Tag! == "hls").Cells[0];
+                if (!monitorDetail.Text.Contains("/live/index.m3u8") || monitorLinks.Items.Count < 2 || !openLink.Enabled) throw new Exception("Live HLS links are missing or disabled.");
+                Capture(window, "Monitor-HLS.png");
+                monitorGrid.CurrentCell = monitorGrid.Rows.Cast<DataGridViewRow>().Single(r => (string)r.Tag! == publish.Id.ToString()).Cells[0];
+                if (!monitorDetail.Text.Contains("Fixture connection failed") || monitorDetail.Text.Contains("private-fixture") || openLink.Enabled) throw new Exception("RTMP status, private key redaction or browser guard failed.");
+                window.RenderMonitor(monitorProject, telemetry with { Routes = [new("hls", StageFlow.Core.Monitoring.VideoRouteState.Live), new(publish.Id.ToString(), StageFlow.Core.Monitoring.VideoRouteState.Live, Frames: 200)] });
+                if ((string)monitorGrid.CurrentRow!.Tag! != publish.Id.ToString() || !monitorDetail.Text.Contains("200")) throw new Exception("Live refresh lost selection or packet count.");
+                Capture(window, "Monitor-RTMP.png");
+                monitorGrid.CurrentCell = monitorGrid.Rows.Cast<DataGridViewRow>().Single(r => (string)r.Tag! == "encoder:hevc_nvenc").Cells[0];
+                if (monitorLinks.Items.Count != 0 || openLink.Enabled) throw new Exception("Encoder row retained another route's link.");
+                window.RenderMonitor(monitorProject, new(false, null, 0, 0, []));
+                monitorGrid.CurrentCell = monitorGrid.Rows[0].Cells[0]; if (openLink.Enabled) throw new Exception("Stopped HLS appears browsable/live.");
+                window.RenderMonitor(window.WorkingProject, null); monitorTabs.SelectedIndex = 0;
+                Console.WriteLine("PASS: Monitor HLS links, RTMP privacy/status, encoder rows, selection retention and stop transitions.");
                 var previewHost = Descendants(window).OfType<AspectPreviewHost>().Single();
                 foreach (var size in new[] { new Size(1100,720), new Size(1920,1080), new Size(1200,900), new Size(1500,780) })
                 {

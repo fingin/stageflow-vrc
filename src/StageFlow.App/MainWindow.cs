@@ -125,15 +125,19 @@ public sealed partial class MainWindow : Form
         _play.Enabled = snapshot.Mode == ClockMode.Internal; _timeline.Enabled = snapshot.Mode == ClockMode.Internal;
         _stream.Text = status.Streaming ? "■ Stop stream" : "Start stream";
         _renderCard.Text = $"GPU · {status.RenderMilliseconds:0.00} ms   /   {_project.FpsNumerator / (double)_project.FpsDenominator:0.##} fps";
-        _routeCard.Text = status.Streaming ? "● STREAM LIVE" : _project.LanVideo.NdiEnabled || _project.LanVideo.OmtEnabled ? "● LAN OUTPUTS ON" : "○ OUTPUT IDLE"; _routeCard.ForeColor = status.Streaming ? Theme.Cyan : Theme.Muted;
-        _status.Text = status.Error ?? status.MediaError ?? $"{status.Gpu}   ·   Render {status.RenderMilliseconds:0.00} ms   ·   Late {status.MissedDeadlines}   ·   Art-Net {status.ArtNetPackets:N0} packets   ·   Audio underruns {status.AudioUnderruns}   {(status.Streaming ? "·   STREAM LIVE" : "")}";
+        bool routeError = status.Video?.EncoderError != null || status.Video?.FatalError != null || status.Video?.Routes.Any(r => r.State is StageFlow.Core.Monitoring.VideoRouteState.Error or StageFlow.Core.Monitoring.VideoRouteState.Stalled) == true;
+        bool routeActive = status.Video?.Routes.Any(r => r.State == StageFlow.Core.Monitoring.VideoRouteState.Live) == true;
+        _routeCard.Text = routeError ? "● CONNECTION NEEDS ATTENTION" : status.Streaming ? "● ENCODER RUNNING" : routeActive ? "● OUTPUT ACTIVE" : "○ OUTPUT IDLE";
+        _routeCard.ForeColor = routeError ? Theme.Warning : status.Streaming || routeActive ? Theme.Cyan : Theme.Muted;
+        _status.Text = status.Error ?? status.MediaError ?? $"{status.Gpu}   ·   Render {status.RenderMilliseconds:0.00} ms   ·   Late {status.MissedDeadlines}   ·   Art-Net {status.ArtNetPackets:N0} packets   ·   Audio underruns {status.AudioUnderruns}   {(status.Streaming ? "·   ENCODER RUNNING" : "")}";
         if (_recorder != null)
         {
             _status.Text = "● REC   ·   " + _status.Text;
             _recordLabel.Text = _recorder.Error is { } failure ? "Recording error: " + failure : "Recording once per second\n" + Path.GetFileName(_recorder.FilePath);
         }
         _diagnostics.Text = $"GPU\n{status.Gpu}\n\nRender mean / peak\n{status.MeanRenderMilliseconds:0.00} / {status.PeakRenderMilliseconds:0.00} ms\nFrames {status.RenderedFrames:N0} · late {status.MissedDeadlines:N0}\n\nAudio buffer underruns {status.AudioUnderruns}\nArt-Net packets {status.ArtNetPackets:N0}\n\nMIDI-DMX\n{status.MidiDmx}\n\nSpout output\n{status.SpoutOutput ?? "Off"}\n{status.SpoutStatus}";
-        _diagnostics.Text += "\n\nNetwork outputs\n" + status.NetworkStatus;
+        _diagnostics.Text = StageFlow.Core.Monitoring.VideoMonitor.SafeError(_diagnostics.Text + "\n\nNetwork outputs\n" + status.NetworkStatus, _project);
+        RefreshMonitor();
     }
     private void TogglePlay()
     { if (_engine == null) return; if (_engine.Transport.Snapshot().State == TransportState.Playing) _engine.Transport.Pause(); else _engine.Transport.Play(); }
@@ -194,7 +198,7 @@ public sealed partial class MainWindow : Form
         _projectTitle.Text = _project.Name + (_dirty ? "  •" : "") + $"    {_project.Width} × {_project.Height} / {(double)_project.FpsNumerator / _project.FpsDenominator:0.###} fps";
         Text = $"{_project.Name}{(_dirty ? " *" : "")} — StageFlow {Program.DisplayVersion}";
         _loop.Text = _project.LoopEnabled ? "Loop: ON" : "Loop: off";
-        _binding = false; BindRoutes(); _refreshNetwork?.Invoke();
+        _binding = false; BindRoutes(); _refreshNetwork?.Invoke(); RefreshMonitor(force: true);
     }
     private void DrawLayerItem(object? sender, DrawItemEventArgs e)
     {

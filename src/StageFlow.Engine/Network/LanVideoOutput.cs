@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Threading.Channels;
 using StageFlow.Core.Projects;
+using StageFlow.Core.Monitoring;
 using StageFlow.Engine.Graphics;
 using Vortice.Direct3D11;
 
@@ -27,6 +28,8 @@ public sealed unsafe class LanVideoOutput : IDisposable
         public long Sent, Dropped;
         public string? Error;
         public string Status => _sender.Name + (Error == null ? $": {Interlocked.Read(ref Sent)} frames / {Interlocked.Read(ref Dropped)} dropped" : ": " + Error);
+        public VideoRouteTelemetry Snapshot() => new(_sender.Protocol, Error != null ? VideoRouteState.Error : Interlocked.Read(ref Sent) > 0 ? VideoRouteState.Live : VideoRouteState.Connecting,
+            Frames: Interlocked.Read(ref Sent), Dropped: Interlocked.Read(ref Dropped), Error: Error, Address: _sender.Address);
         public SenderWorker(ILanSender sender) { _sender = sender; _thread = new Thread(Run) { IsBackground = true, Name = sender.Name }; _thread.Start(); }
         public void Submit(LanFrame frame) { frame.Retain(); if (Error != null || !_frames.Writer.TryWrite(frame)) { frame.Release(); Interlocked.Increment(ref Dropped); } }
         private void Run()
@@ -48,6 +51,7 @@ public sealed unsafe class LanVideoOutput : IDisposable
     private int _cursor;
     private long _dropped;
     public string Status => string.Join(" · ", _senders.Select(s => s.Status)) + $" · GPU skips {_dropped}";
+    public VideoRouteTelemetry[] Snapshot() => _senders.Select(s => { var status = s.Snapshot(); return status with { Dropped = status.Dropped + _dropped }; }).ToArray();
     public LanVideoOutput(GpuDevice gpu, GpuSurface canvas, int fpsNum, int fpsDen, LanVideoSettings settings)
     {
         _gpu = gpu; _width = canvas.Width; _height = canvas.Height; _fpsNum = fpsNum; _fpsDen = fpsDen;

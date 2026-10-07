@@ -45,9 +45,11 @@ internal sealed unsafe class NdiSender : ILanSender
 {
     private nint _sender;
     public string Name { get; }
+    public string Protocol => "ndi";
+    public string Address { get; }
     public NdiSender(string name)
     {
-        Name = "NDI " + name;
+        Name = "NDI " + name; Address = Environment.MachineName + " (" + name + ")";
         if (!NdiNative.NDIlib_initialize()) throw new InvalidOperationException("NDI initialization failed.");
         nint text = Marshal.StringToCoTaskMemUTF8(name);
         try { var settings = new NdiNative.SendCreate { Name = text }; _sender = NdiNative.NDIlib_send_create(ref settings); }

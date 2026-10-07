@@ -45,5 +45,7 @@ public static class ProtocolRuntime
 internal interface ILanSender : IDisposable
 {
     string Name { get; }
+    string Protocol { get; }
+    string Address { get; }
     void Send(LanFrame frame);
 }

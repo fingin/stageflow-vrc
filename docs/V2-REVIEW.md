@@ -1,4 +1,4 @@
-# V2 code review — 2.0.0-alpha.2
+# V2 code review — 2.0.0-alpha.5
 
 The review covered the application/settings lifecycle, core timing/protocols,
 project validation/persistence, media/GPU/streaming modules, native interop and
@@ -6,6 +6,21 @@ packaging. Fixes are in v2 only. This is a source review with targeted automated
 verification, not an independent security audit or production certification.
 
 ## Findings addressed
+
+Alpha.5 adds immutable Monitor telemetry at a 500 ms cadence. Sender counters use
+atomic reads; interface discovery runs off the render thread. The UI updates only
+while Monitor is visible, retains selection and keeps the selected link accessible.
+It consumes the published playback state instead of polling the master timeline.
+Independent destination failures no longer appear as a healthy stream solely
+because the shared encoder is running. Fatal termination invalidates live states;
+startup failures remain visible until stop or a successful restart.
+
+HLS URLs follow the actual bind address, including IPv6, and browser actions are
+limited to the selected active HLS route. RTMP/SRT credentials, keys and private
+query options are removed from Monitor details and copied addresses. Protocol
+names are distinguished from browser links, source counters from delivery
+confirmation, and encoder selection from hardware capability. Functional and
+native checks plus the intermittent audio observation are recorded in VALIDATION.md.
 
 Alpha.4 adds validated RTMP publish-key/authentication fields and native encoder
 controls. The destination editor participates in live commit, persistence, undo,

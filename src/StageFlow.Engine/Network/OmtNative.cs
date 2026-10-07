@@ -32,7 +32,14 @@ internal sealed unsafe class OmtSender : ILanSender
 {
     private nint _sender;
     public string Name { get; }
-    public OmtSender(string name) { Name = "OMT " + name; _sender = OmtNative.omt_send_create(name, 100); if (_sender == 0) throw new InvalidOperationException("OMT sender could not start."); }
+    public string Protocol => "omt";
+    public string Address { get; }
+    public OmtSender(string name)
+    {
+        Name = "OMT " + name; _sender = OmtNative.omt_send_create(name, 100); if (_sender == 0) throw new InvalidOperationException("OMT sender could not start.");
+        byte* address = stackalloc byte[1024]; new Span<byte>(address, 1024).Clear(); OmtNative.omt_send_getaddress(_sender, address, 1024);
+        Address = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)address) ?? name;
+    }
     public void Send(LanFrame frame)
     {
         fixed (byte* pixels = frame.Pixels)

@@ -25,6 +25,17 @@ public sealed unsafe class NetworkVideoInput : IDisposable
     public string Source { get; }
     public string? Error { get; private set; }
     public long Frames { get; private set; }
+    private long _lastFrame;
+    private int _inputWidth, _inputHeight;
+    public StageFlow.Core.Monitoring.VideoRouteTelemetry Snapshot(Guid id)
+    {
+        long last = Interlocked.Read(ref _lastFrame);
+        var state = Error != null ? StageFlow.Core.Monitoring.VideoRouteState.Error : last == 0 ? StageFlow.Core.Monitoring.VideoRouteState.Waiting :
+            Environment.TickCount64 - last > 3000 ? StageFlow.Core.Monitoring.VideoRouteState.Stalled : StageFlow.Core.Monitoring.VideoRouteState.Live;
+        return new(id.ToString(), state, Frames: Frames, Error: Error, Width: Volatile.Read(ref _inputWidth), Height: Volatile.Read(ref _inputHeight));
+    }
+    private void FrameArrived(int width, int height)
+    { Volatile.Write(ref _inputWidth, width); Volatile.Write(ref _inputHeight, height); Interlocked.Exchange(ref _lastFrame, Environment.TickCount64); }
     public NetworkVideoInput(GpuDevice gpu, NetworkSourceProtocol protocol, string source)
     {
         _gpu = gpu; Protocol = protocol; Source = source;
@@ -48,7 +59,7 @@ public sealed unsafe class NetworkVideoInput : IDisposable
         {
             var frame = ffmpeg.av_frame_clone(decoder.Frame); if (frame == null) throw new OutOfMemoryException();
             nint old = Interlocked.Exchange(ref _latestGpu, (nint)frame); if (old != 0) { var previous = (AVFrame*)old; ffmpeg.av_frame_free(&previous); }
-            Frames++; Error = null;
+            Frames++; Error = null; FrameArrived(decoder.Frame->width, decoder.Frame->height);
         }
     }
     private void RunOmt()
@@ -106,7 +117,7 @@ public sealed unsafe class NetworkVideoInput : IDisposable
             for (int y = 0; y < height; y++) Buffer.MemoryCopy((byte*)data + y * stride, target + y * width * 4, width * 4, width * 4);
         if (opaque) for (int i = 3; i < width * height * 4; i += 4) bytes[i] = 255;
         var old = Interlocked.Exchange(ref _latest, new(bytes, width, height)); if (old != null) ArrayPool<byte>.Shared.Return(old.Bytes);
-        Frames++; Error = null;
+        Frames++; Error = null; FrameArrived(width, height);
     }
     private void PushAudio(float* data, int rate, int channels, int samples, int stride)
     {

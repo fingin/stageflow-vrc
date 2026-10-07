@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0-alpha.5 — 2026-10-06 (Pacific)
+
+- Expand Monitor into per-route connection/format details and a separate Performance view.
+- Show local/LAN HLS player and playlist links, bound-interface/IPv6 URLs, safe RTMP/SRT
+  endpoints, actual Spout/NDI/OMT sender identifiers, and Open/Copy/Settings actions.
+- Report encoder state, video/audio formats, packet/frame counts, payload bytes,
+  queue depth, drops/skips, waiting/stalled inputs and connection failures.
+- Keep encoder-running status distinct from destination health. Preserve stream-start
+  failures and clear stale live status after engine termination.
+- Publish bounded-cadence immutable telemetry; discover LAN addresses off-thread.
+  Monitor reads published playback state without polling the master timeline again.
+- Add link/privacy/state tests, UI lifecycle checks and native sender telemetry checks.
+
 ## 2.0.0-alpha.4 — 2026-10-06 (Pacific)
 
 - Set new-show OSC command/feedback defaults to 8000/8001; preserve saved custom ports.

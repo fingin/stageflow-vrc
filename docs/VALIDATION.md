@@ -1,4 +1,45 @@
-# Validation log — v2 alpha.4
+# Validation log — v2 alpha.5
+
+## Alpha.5 Monitor follow-up (October 6, Pacific)
+
+Release build: zero warnings/errors; **33/33 core checks**. Monitor checks cover
+IPv4/IPv6 and interface-specific HLS links, endpoint/credential redaction,
+per-destination failures independently of the shared encoder, disabled/unselected
+states, stalled inputs, and stop/fatal transitions. UI checks cover initial HLS
+selection, link actions, selection retention, privacy and live state updates, plus
+the existing preferences, OSC feedback, menu, persistence and resize suite.
+
+Native HLS checks pass for H.264 NVENC, HEVC NVENC and x264 with AAC. Production
+NDI/OMT output and input checks verify real source identifiers, sent/received
+frames, dimensions and GPU/audio delivery; the short shared staging test sent
+157 frames per sender with zero reported drops/skips. SRT video/AAC loopback also
+passes. The independent RTMP authentication fixture receives 212 video and 331
+audio messages, verifies telemetry counters, and rejects an incorrect password
+with zero publish/media messages. These are local checks, not public-service tests.
+
+The 60-second application run opens Monitor during MP4 playback, imported Sample
+Show grids, three changing Art-Net universes, twelve additional clocks,
+Spout output and HLS/AAC at 2560×1440/60. The actual engine snapshot reports the
+encoder running, HLS segments ready and Spout frames sent. After warmup, 45.03
+measured seconds produced 2,700 frames, **zero missed deadlines and zero audio
+underruns**, 1.48 ms mean / 9.00 ms peak render submission and wait, and 9.75% CPU
+of one logical core. Working set moved from 295.6 to 286.8 MiB on the RTX 4080.
+A final 30-second run after the initial-selection UI fix also passes: the live
+HLS address and Open action are immediately available; its 15-second measured
+window has 900 frames, zero missed deadlines and zero audio underruns.
+
+An earlier run reported three cumulative audio underruns with zero missed video
+deadlines; the unchanged repeat and the later run above were clean. The cause
+was not established, so this remains an intermittent observation, not a claimed
+audio fix. Monitor reads published playback state and does not add another poll
+of the master timeline. These short tests do not replace a long show soak.
+
+Monitor's Active state reports local sender activity. NDI/OMT do not report viewer
+counts here; RTMP/SRT counters measure successfully submitted encoded payload, not
+remote display confirmation. Spout input reports the shared texture and dimensions
+without claiming a distinct-source-frame count. LAN links describe the configured
+HTTP bind and active interfaces; firewall/remote reachability still needs checking
+on the target network. Unselected encoders are not presented as GPU-certified.
 
 ## Alpha.4 follow-up (October 6, Pacific)
 

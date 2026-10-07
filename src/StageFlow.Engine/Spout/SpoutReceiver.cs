@@ -17,6 +17,7 @@ public sealed class SpoutReceiver(GpuDevice gpu, string sender) : IDisposable
     public string? Error { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
+    public bool HasFrame => _hasFrame;
     public ID3D11ShaderResourceView? Receive()
     {
         if (Environment.TickCount64 >= _refresh)

@@ -81,6 +81,13 @@ public sealed partial class MainWindow
                 }
                 if (second == 12)
                 {
+                    var videoMonitor = _engine.Status.Video ?? throw new Exception("Engine monitor telemetry missing.");
+                    if (!videoMonitor.EncoderRunning || videoMonitor.EncodedFrames <= 0 || videoMonitor.Routes.Single(r => r.Id == "hls").State != StageFlow.Core.Monitoring.VideoRouteState.Live ||
+                        videoMonitor.Routes.Single(r => r.Id == "spout").Frames <= 0) throw new Exception("Monitor does not report live HLS/encoder/Spout.");
+                    _inspectorTabs.SelectedIndex = 1; RefreshMonitor(force: true);
+                    if (SelectedMonitorRoute()?.Id != "hls" || !_monitorOpen.Enabled || _monitorAddress.Text != "http://127.0.0.1:18888/") throw new Exception("Monitor did not expose live HLS links on first open.");
+                    await Task.Delay(50); // Let newly visible owner-drawn controls paint before capture.
+                    using (var monitorImage = new Bitmap(Width, Height)) { DrawToBitmap(monitorImage, new Rectangle(0, 0, Width, Height)); monitorImage.Save(Path.Combine(folder, "monitor.png"), ImageFormat.Png); }
                     var playlist = await http.GetStringAsync("http://127.0.0.1:18888/live/index.m3u8");
                     if (!playlist.Contains("#EXTINF")) throw new Exception("Live HLS has no segments.");
                     File.WriteAllText(Path.Combine(folder, "live.m3u8"), playlist);

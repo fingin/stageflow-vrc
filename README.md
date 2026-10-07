@@ -1,10 +1,10 @@
-# StageFlow 2.0.0-alpha.4
+# StageFlow 2.0.0-alpha.5
 
 A Windows show workspace for video, timecode, Art-Net grids, compositing and live
 video routing. This is the independent **v2 fork**. V1 remains frozen.
 
 Launch **StageFlow.App.exe** in the portable folder (this release is in
-**StageFlow-v2-Portable-alpha.4**). Save and close the previous build before switching. The portable build bundles
+**StageFlow-v2-Portable-alpha.5**). Save and close the previous build before switching. The portable build bundles
 .NET, the native media/network libraries and the HLS player. It runs as one
 application process; OBS, MediaMTX, Hnode and an external FFmpeg process are not
 required. Existing Windows MIDI ports, including loopMIDI, remain selectable.
@@ -111,6 +111,25 @@ Default HLS player: http://127.0.0.1:8888/; playlist: /live/index.m3u8.
 the selected port. HLS is conventional segmented HTTP playback, with seconds of
 latency. The server has no login/TLS; firewall/router settings are not changed.
 Browser audio needs a user Play gesture. NDI® is a registered trademark of Vizrt NDI AB.
+
+## Monitor links and connection status
+
+Select **Monitor → Connections & encoders**. Choose a route to see its status,
+video/audio format, counters and errors. The address selector above the list offers
+HLS player/playlist links for this PC and the listening LAN interfaces. Use **Open
+link**, **Copy address**, **Settings**, or **Refresh links** after a network change.
+The HLS Open action is enabled once the playlist is ready.
+
+RTMP/RTMPS and SRT destinations have independent status and packet/queue counters.
+Spout, NDI and OMT show their actual sender identifiers and frame/drop counts.
+Live inputs show received dimensions and waiting/stalled/error states. Encoder rows
+cover NVIDIA H.264, NVIDIA HEVC and CPU x264; unselected backends are labeled as such.
+The movie row shows loaded video/audio codecs. **Monitor → Performance** retains
+render/audio/Art-Net statistics and diagnostic recording controls.
+
+Publish endpoints are not playback pages. Credentials, stream keys and private URL
+options are hidden in Monitor; use Preferences to edit full destinations. “Active”
+means the sender is running, not that a remote viewer has confirmed playback.
 
 ## OSC controls and feedback
 

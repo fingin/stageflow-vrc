@@ -39,6 +39,11 @@ internal static unsafe class ProtocolChecks
         if (!(ndiVideo && omtVideo && ndiAudio && omtAudio)) throw new Exception($"Live inputs failed NDI={ndiVideo}/{ndiAudio} {ndiInput.Error}; OMT={omtVideo}/{omtAudio} {omtInput.Error}");
         Console.WriteLine("PASS NDI and OMT inputs → GPU layers + live audio mixing");
         Console.WriteLine("PASS GPU staging ring: " + output.Status);
+        foreach (var route in output.Snapshot())
+            if (route.State != StageFlow.Core.Monitoring.VideoRouteState.Live || route.Frames == 0 || string.IsNullOrWhiteSpace(route.Address)) throw new Exception("LAN monitor telemetry is missing.");
+        foreach (var input in new[] { ndiInput, omtInput })
+            if (input.Snapshot(Guid.NewGuid()) is not { State: StageFlow.Core.Monitoring.VideoRouteState.Live, Width: 640, Height: 360 }) throw new Exception("Live input format/status telemetry is missing.");
+        Console.WriteLine("PASS independent NDI/OMT sender addresses, counts and live input dimensions.");
     }
     public static void Network(string nativeDirectory, string url)
         => NetworkOutput(nativeDirectory, new() { Enabled = true, Url = url, Protocol = url.StartsWith("srt:") ? NetworkStreamProtocol.Srt : NetworkStreamProtocol.Rtmp }, new() { HlsEnabled = false, VideoBitrateKbps = 2000 });
@@ -59,7 +64,17 @@ internal static unsafe class ProtocolChecks
             encoder.SubmitVideo(canvas); encoder.SubmitAudio(audio); Thread.Sleep(33); connected |= encoder.NetworkStatus.Contains("Live");
         }
         encoder.Complete(); Console.WriteLine("Network final: " + encoder.NetworkStatus);
-        if (!connected) throw new Exception("Network output never became live.");
+        if (!connected)
+        {
+            if (encoder.NetworkTelemetry().Single().State != StageFlow.Core.Monitoring.VideoRouteState.Error) throw new Exception("Failed network output was not reported as Error.");
+            Console.WriteLine("PASS failed network output is reported as Error.");
+            throw new Exception("Network output never became live.");
+        }
+        if (!SpinWait.SpinUntil(() => encoder.NetworkTelemetry().Single().Frames >= 210, 2000)) throw new Exception("Monitor packet counters did not catch up.");
+        var monitor = encoder.NetworkTelemetry().Single();
+        if (monitor.Id != output.Id.ToString() || monitor.AudioPackets == 0 || monitor.Bytes == 0 || monitor.Queued != 0 || monitor.State != StageFlow.Core.Monitoring.VideoRouteState.Live)
+            throw new Exception("Incorrect live output monitor telemetry.");
+        Console.WriteLine("PASS network monitor reports destination ID, sent video/audio, payload bytes and drained queue.");
         Console.WriteLine("PASS network output connected and submitted 210 video frames with AAC audio");
     }
     public static void SrtLoopback(string nativeDirectory)

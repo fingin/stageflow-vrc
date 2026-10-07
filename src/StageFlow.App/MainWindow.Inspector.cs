@@ -55,7 +55,7 @@ public sealed partial class MainWindow
         _recordButton.Click += (_, _) => ToggleRecording();
         actions.Controls.Add(Theme.Button("Open logs", (_, _) => { Directory.CreateDirectory(_diagnosticFolder); OpenExternal(_diagnosticFolder); }));
         actions.Controls.Add(Theme.Button("Clear DMX", async (_, _) => await Guard(() => _engine!.BlackoutDmxAsync())));
-        status.Controls.Add(_diagnostics); status.Controls.Add(actions); status.Controls.Add(_recordLabel); _inspectorTabs.TabPages.Add(status);
+        status.Controls.Add(BuildMonitorBody(actions)); _inspectorTabs.TabPages.Add(status);
         InitializeOsc();
     }
     private static void OpenExternal(string path) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });

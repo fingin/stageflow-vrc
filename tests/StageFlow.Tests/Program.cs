@@ -8,6 +8,8 @@ using StageFlow.Core.Osc;
 
 var tests = new (string Name, Action Body)[]
 {
+    ("Monitor HLS interface links and private endpoint redaction", MonitorChecks.Links),
+    ("Monitor per-route states, failures, codecs and stop transitions", MonitorChecks.States),
     ("RTMP separate keys, raw credentials, legacy URLs and validation", StreamingSettingsChecks.Destinations),
     ("Encoding ranges, GOP timing and backward-compatible persistence", StreamingSettingsChecks.EncodingAndPersistence),
     ("OSC mapping defaults, unique addresses and feedback validation", OscFeedbackChecks.Defaults),

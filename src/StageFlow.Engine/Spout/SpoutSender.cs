@@ -17,6 +17,7 @@ public sealed class SpoutSender : IDisposable
     private int _disposed;
     public string Name { get; }
     public long SkippedFrames { get; private set; }
+    public long SentFrames { get; private set; }
     public SpoutSender(GpuDevice gpu, string name, int width, int height)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || name.Any(c => c < 32 || c > 126 || c == '\\'))
@@ -57,6 +58,7 @@ public sealed class SpoutSender : IDisposable
             {
                 _gpu.Context.CopyResource(_surface.Texture, surface.Texture); _gpu.Context.Flush();
                 if (_counter.WaitOne(0)) _counter.Release(2);
+                SentFrames++;
             }
             finally { _keyed.ReleaseSync(0); }
         }

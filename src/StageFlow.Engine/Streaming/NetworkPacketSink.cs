@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using StageFlow.Core.Projects;
+using StageFlow.Core.Monitoring;
 using StageFlow.Engine.Media;
 
 namespace StageFlow.Engine.Streaming;
@@ -17,9 +18,18 @@ public sealed unsafe class NetworkPacketSink : IDisposable
     private volatile bool _cancel;
     private long _deadline;
     private string? _status;
+    private long _videoPackets, _audioPackets, _bytes;
+    private int _queued;
     private readonly AVIOInterruptCB_callback _interrupt;
     public string Status => Volatile.Read(ref _status) ?? "Connecting";
     public string Name => _output.Name;
+    public VideoRouteTelemetry Snapshot()
+    {
+        string status = Status;
+        return new(_output.Id.ToString(), status.StartsWith("Stopped:", StringComparison.Ordinal) ? VideoRouteState.Error : status == "Live" ? VideoRouteState.Live : VideoRouteState.Connecting,
+            Interlocked.Read(ref _videoPackets), Interlocked.Read(ref _audioPackets), Interlocked.Read(ref _bytes), Math.Max(0, Volatile.Read(ref _queued)),
+            Error: status.StartsWith("Stopped:", StringComparison.Ordinal) ? status[8..].Trim() : null);
+    }
     public NetworkPacketSink(NetworkStreamOutput output, AVCodecContext* video, AVCodecContext* audio)
     {
         _output = output; _timeBases = [video->time_base, audio->time_base];
@@ -43,8 +53,10 @@ public sealed unsafe class NetworkPacketSink : IDisposable
     {
         if (_cancel) return;
         var copy = ffmpeg.av_packet_clone(packet); if (copy == null) throw new OutOfMemoryException();
+        Interlocked.Increment(ref _queued);
         if (!_queue.Writer.TryWrite(((nint)copy, stream)))
         {
+            Interlocked.Decrement(ref _queued);
             ffmpeg.av_packet_free(&copy); _status = "Stopped: destination cannot keep up (queue full)"; _cancel = true; _queue.Writer.TryComplete();
         }
     }
@@ -74,16 +86,21 @@ public sealed unsafe class NetworkPacketSink : IDisposable
             else ffmpeg.av_dict_set(&options, "mpegts_flags", "+resend_headers", 0);
             try { Deadline(); FFmpegRuntime.Check(ffmpeg.avformat_write_header(format, &options), "Write network stream header"); }
             finally { ffmpeg.av_dict_free(&options); }
+            if (_cancel) return; // Preserve a queue-overflow failure while connection setup was blocked.
             _status = "Live";
             while (!_cancel && _queue.Reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
             {
                 while (!_cancel && _queue.Reader.TryRead(out var item))
                 {
+                    Interlocked.Decrement(ref _queued);
                     var packet = (AVPacket*)item.Packet;
                     try
                     {
                         packet->stream_index = item.Stream; ffmpeg.av_packet_rescale_ts(packet, _timeBases[item.Stream], format->streams[item.Stream]->time_base);
+                        int bytes = packet->size;
                         Deadline(); FFmpegRuntime.Check(ffmpeg.av_interleaved_write_frame(format, packet), "Send network media");
+                        Interlocked.Add(ref _bytes, bytes);
+                        if (item.Stream == 0) Interlocked.Increment(ref _videoPackets); else Interlocked.Increment(ref _audioPackets);
                     }
                     finally { ffmpeg.av_packet_free(&packet); }
                 }
@@ -94,7 +111,7 @@ public sealed unsafe class NetworkPacketSink : IDisposable
         finally
         {
             _cancel = true; _queue.Writer.TryComplete();
-            while (_queue.Reader.TryRead(out var item)) { var packet = (AVPacket*)item.Packet; ffmpeg.av_packet_free(&packet); }
+            while (_queue.Reader.TryRead(out var item)) { Interlocked.Decrement(ref _queued); var packet = (AVPacket*)item.Packet; ffmpeg.av_packet_free(&packet); }
             if (format != null) { if (format->pb != null) ffmpeg.avio_closep(&format->pb); ffmpeg.avformat_free_context(format); }
         }
     }
