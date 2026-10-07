@@ -1,4 +1,4 @@
-# StageFlow 0.1.0-alpha.3
+# StageFlow 0.1.0-alpha.4
 
 Windows show playback, master/follower MIDI timecode, Art-Net gridnode overlays,
 GPU compositing, Spout and live HLS in one application process.
@@ -64,13 +64,17 @@ REC. Logs remain in `diagnostics/`, readable while the app is running. You can
 also toggle recording in Status. The source includes `scripts/analyze-performance.ps1`
 to summarize a saved JSONL log.
 
+Managed crashes also save a `Crash-*.txt` report with the full exception and build
+version. If the app folder is read-only, crash reports use
+`%LOCALAPPDATA%\StageFlow\diagnostics`. Keep these reports with the performance log.
+
 ## Build and modify
 
 Use Windows x64 and .NET SDK 10.0.401 or a compatible .NET 10 SDK:
 
 ```powershell
 .\scripts\prepare-native.ps1
-.\scripts\build.ps1 -Test -EngineTest
+.\scripts\build.ps1 -Test -EngineTest -UiTest
 .\scripts\package.ps1
 ```
 

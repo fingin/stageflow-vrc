@@ -1,4 +1,4 @@
-# Validation log — alpha.3
+# Validation log — alpha.4
 
 This document distinguishes implemented behavior from external show certification.
 Performance figures below are measured on this PC's RTX 4080, not universal claims.
@@ -24,6 +24,23 @@ Render milliseconds measure CPU submission/wait time, not GPU timestamp queries.
 - GUI integration exercises add clock, undo, redo, remove, pause, seek, loop,
   still export and streaming. Native GUI automation capture timed out; do not
   interpret the harness as a completed manual interaction/accessibility review.
+
+## Alpha.4 crash regression
+
+Windows recorded the same `ObjectDisposedException` in alpha.3 at 19:16:38 and
+19:27:14 local time on October 6. `ShowFileMenu` disposed its dropdown inside
+`Closed`, while WinForms' modal-menu filter still required its window handle.
+An isolated UI suite reproduced the identical stack through
+`Application.FilterMessage` before the fix. The corrected form-owned menu passes
+100 outside-click dismissals (50 with the Recent submenu open) plus 100 explicit
+keyboard/item dismissals, and is disposed at owner shutdown. Tests use a separate
+temporary state folder and open no hardware routes. This exercises real WinForms
+menu filtering, without injecting global mouse/keyboard input.
+
+Crash report tests verify full inner exceptions/stacks, a writable fallback and
+safe failure when neither destination is writable. Abnormal form disposal
+preserves the recovery file. Native access violations still depend on Windows
+Error Reporting; managed crash logs do not replace native dumps.
 
 ## Performance measurements
 

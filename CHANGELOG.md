@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.4 — 2026-10-06
+
+- Fix the Show menu crash when clicking outside it: retain the menu until its
+  owning window is disposed, and refresh recent projects when it opens.
+- Capture managed UI/process failures with version, runtime and full exception
+  stacks in `diagnostics/`, with a LocalAppData fallback for read-only installs.
+- Stop media/MIDI/recording resources on abnormal UI-loop exit while retaining
+  the recovery autosave. Dispose reusable menus and UI timers on shutdown.
+- Add a regression suite that reproduces the original WinForms message-filter
+  crash and checks 200 menu dismissals, nested menus, logging and recovery.
+
 ## 0.1.0-alpha.3 — 2026-10-06
 
 - Add background JSONL performance capture, visible REC state, slow-frame phase

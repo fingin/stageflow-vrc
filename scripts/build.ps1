@@ -1,4 +1,4 @@
-param([switch]$Test, [switch]$EngineTest)
+param([switch]$Test, [switch]$EngineTest, [switch]$UiTest)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $localDotnet = Join-Path $repo '..\..\work\toolchain\dotnet\dotnet.exe'
@@ -13,4 +13,8 @@ if ($Test) {
 if ($EngineTest) {
     & $dotnet run --no-build --project (Join-Path $repo 'tests\StageFlow.EngineTests') -c Release
     if ($LASTEXITCODE -ne 0) { throw 'Engine checks failed' }
+}
+if ($UiTest) {
+    & $dotnet run --no-build --project (Join-Path $repo 'tests\StageFlow.UiTests') -c Release
+    if ($LASTEXITCODE -ne 0) { throw 'UI checks failed' }
 }

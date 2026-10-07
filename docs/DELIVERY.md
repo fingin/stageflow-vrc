@@ -1,6 +1,6 @@
 # StageFlow delivery contract
 
-Status: runnable alpha.3 delivered for user stress testing. Final performance and
+Status: runnable alpha.4 delivered for user stress testing. Final performance and
 external show validation remain open; this is not a completion claim for the goal.
 
 ## User workflows

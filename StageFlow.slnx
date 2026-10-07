@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/StageFlow.EngineTests/StageFlow.EngineTests.csproj" />
     <Project Path="tests/StageFlow.Tests/StageFlow.Tests.csproj" />
+    <Project Path="tests/StageFlow.UiTests/StageFlow.UiTests.csproj" />
   </Folder>
 </Solution>

@@ -4,6 +4,7 @@ namespace StageFlow.App;
 
 public sealed partial class MainWindow
 {
+    private ContextMenuStrip? _fileMenu;
     private async Task OpenMovie()
     {
         using var dialog = new OpenFileDialog { Title = "Open show movie", Filter = "Video files|*.mp4;*.m4v;*.mov;*.mkv;*.avi|All files|*.*" };
@@ -117,7 +118,13 @@ public sealed partial class MainWindow
             _project = project; _projectPath = null; _history = new(project); _dirty = false; _selected = null; ClearRecovery(); RefreshProjectUi();
         });
     }
-    private void ShowFileMenu(Control anchor)
+    internal ContextMenuStrip ShowFileMenu(Control anchor)
+    {
+        _fileMenu ??= CreateFileMenu();
+        _fileMenu.Show(anchor, new Point(0, anchor.Height));
+        return _fileMenu;
+    }
+    private ContextMenuStrip CreateFileMenu()
     {
         var menu = new ContextMenuStrip { BackColor = Theme.Panel, ForeColor = Theme.Text };
         menu.Items.Add("New show   Ctrl+N", null, async (_, _) => await NewShow());
@@ -126,10 +133,20 @@ public sealed partial class MainWindow
         menu.Items.Add("Rename show…", null, async (_, _) =>
         { string? name = Prompt("Show name", _project.Name); if (!string.IsNullOrWhiteSpace(name)) await Edit("Rename show", _project with { Name = name }); });
         var recent = new ToolStripMenuItem("Recent shows");
-        foreach (string path in RecentProjects()) recent.DropDownItems.Add(Path.GetFileNameWithoutExtension(path), null, async (_, _) => await LoadProject(path));
-        recent.Enabled = recent.DropDownItems.Count > 0; menu.Items.Add(recent);
+        menu.Items.Add(recent);
+        menu.Opening += (_, _) =>
+        {
+            // Refresh only when reopening: no active dropdown is being torn down here.
+            foreach (var item in recent.DropDownItems.Cast<ToolStripItem>().ToArray()) item.Dispose();
+            recent.DropDownItems.Clear();
+            foreach (string path in RecentProjects()) recent.DropDownItems.Add(Path.GetFileNameWithoutExtension(path), null, async (_, _) => await LoadProject(path));
+            recent.Enabled = recent.DropDownItems.Count > 0;
+        };
         menu.Items.Add("Open project folder", null, (_, _) =>
         { if (_projectPath != null) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.GetDirectoryName(_projectPath)!) { UseShellExecute = true }); });
-        menu.Closed += (_, _) => menu.Dispose(); menu.Show(anchor, new Point(0, anchor.Height));
+        // Closed fires inside WinForms' modal-menu filter, which still needs the HWND.
+        // Disposing there crashes when clicking outside the menu. Match the form's lifetime.
+        Disposed += (_, _) => menu.Dispose();
+        return menu;
     }
 }

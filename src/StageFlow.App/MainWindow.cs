@@ -47,14 +47,18 @@ public sealed partial class MainWindow : Form
     private Rectangle _restoredBounds;
     private readonly string _stateDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StageFlow");
 
-    public MainWindow(string[] args)
+    public MainWindow(string[] args) : this(args, true, null) { }
+
+    // Isolated UI checks use a temporary state folder and do not open hardware routes.
+    internal MainWindow(string[] args, bool startEngine, string? stateDirectory)
     {
+        if (stateDirectory != null) _stateDirectory = stateDirectory;
         _recordOnStartup = args.Contains("--record"); _args = args.Where(a => a != "--record").ToArray(); _history = new(_project);
         Text = "StageFlow " + Program.DisplayVersion; Size = new Size(1500, 940); MinimumSize = new Size(1180, 800);
         StartPosition = FormStartPosition.CenterScreen; BackColor = Theme.Background; ForeColor = Theme.Text;
         Font = new Font("Segoe UI", 9); KeyPreview = true; AllowDrop = true;
         BuildLayout(); BuildInspector(); RefreshProjectUi();
-        Shown += async (_, _) => await StartEngine();
+        if (startEngine) Shown += async (_, _) => await StartEngine();
         _preview.Resize += (_, _) => _engine?.ResizePreview(_preview.ClientSize.Width, _preview.ClientSize.Height);
         _preview.MouseDown += PreviewMouseDown; _preview.MouseMove += PreviewMouseMove; _preview.MouseUp += PreviewMouseUp;
         _layers.SelectedIndexChanged += (_, _) => { if (!_binding) { _selected = (_layers.SelectedItem as LayerItem)?.Layer.Id; BindInspector(); } };
@@ -67,6 +71,7 @@ public sealed partial class MainWindow : Form
         markerMenu.Items.Add("Next marker   Ctrl+↓", null, (_, _) => JumpMarker(1));
         markerMenu.Items.Add("Remove marker", null, async (_, _) => await RemoveMarker());
         _markers.ContextMenuStrip = markerMenu;
+        Disposed += (_, _) => markerMenu.Dispose();
         _play.Click += (_, _) => TogglePlay();
         _stream.Click += async (_, _) => await Guard(async () => { if (_engine!.Status.Streaming) await _engine.StopStreamAsync(); else await _engine.StartStreamAsync(); });
         _arm.Click += async (_, _) => await Guard(async () =>
@@ -363,8 +368,29 @@ public sealed partial class MainWindow : Form
             if (choice == DialogResult.Cancel) { e.Cancel = true; return; }
             if (choice == DialogResult.Yes && !SaveProject()) { e.Cancel = true; return; }
         }
-        _uiTimer.Stop(); _autosave.Stop(); _recorder?.Dispose(); _recorder = null; _engine?.Dispose(); _engine = null; _tips.Dispose();
+        StopRuntime();
         ClearRecovery();
+    }
+    private void StopRuntime()
+    {
+        _uiTimer.Stop(); _autosave.Stop();
+        var recorder = _recorder; _recorder = null;
+        try { recorder?.Dispose(); }
+        finally { var engine = _engine; _engine = null; engine?.Dispose(); }
+    }
+    protected override void Dispose(bool disposing)
+    {
+        try
+        {
+            if (disposing)
+            {
+                // Also stop output routes if the message loop exits abnormally. Recovery
+                // is cleared only by an accepted normal close in ClosingWindow.
+                try { StopRuntime(); }
+                finally { _uiTimer.Dispose(); _autosave.Dispose(); _tips.Dispose(); }
+            }
+        }
+        finally { base.Dispose(disposing); }
     }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
